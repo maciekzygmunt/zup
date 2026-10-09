@@ -182,3 +182,7 @@ bun packages/cli/src/index.ts --help           # CLI from source
 Checks: `bun run typecheck`, `bun run lint`, `bun test`. Schema changes: edit
 `apps/server/src/db/schema.ts`, then `bun run --filter @zup/server db:generate`
 (Better Auth tables migrate themselves at startup).
+
+## License
+
+[MIT](LICENSE)
