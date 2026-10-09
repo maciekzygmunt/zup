@@ -1,0 +1,30 @@
+{
+  "name": "@zup/cli",
+  "version": "1.0.0",
+  "description": "Publish files and static sites to your zup server",
+  "type": "module",
+  "bin": {
+    "zup": "./dist/zup.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --target node --outfile dist/zup.mjs --minify --banner '#!/usr/bin/env node' && chmod +x dist/zup.mjs",
+    "dev": "bun src/index.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@zup/shared": "workspace:*",
+    "hono": "^4.13.13",
+    "ignore": "^7.0.12",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@zup/server": "workspace:*"
+  }
+}

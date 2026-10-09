@@ -1,0 +1,17 @@
+# Coolify: use the "Docker Compose" build pack, then give the zup service both domains
+# (e.g. https://zup.example.com,https://preview.example.com) on port 3000.
+services:
+  zup:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_URL: ${APP_URL:?Set APP_URL, e.g. https://zup.example.com}
+      PREVIEW_URL: ${PREVIEW_URL:?Set PREVIEW_URL, e.g. https://preview.example.com}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET (openssl rand -hex 32)}
+    volumes:
+      - zup-data:/data
+    expose:
+      - "3000"
+
+volumes:
+  zup-data:
