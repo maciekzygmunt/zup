@@ -311,37 +311,42 @@ export function createSiteService({
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }
-      const previousId =
-        existing && existing.deploymentId !== row.deploymentId ? existing.deploymentId : null
-      db.transaction((tx) => {
+      // Reads happen inside the transaction, so concurrent requests do not use stale rows.
+      const previousId = db.transaction((tx) => {
+        const replaced = tx
+          .select({ deploymentId: aliases.deploymentId })
+          .from(aliases)
+          .where(eq(aliases.name, name))
+          .get()
         tx.insert(aliases)
           .values(row)
           .onConflictDoUpdate({ target: aliases.name, set: { ...row, createdAt: undefined } })
           .run()
-        if (deployment.autoExpiry) {
-          tx.update(deployments)
-            .set({ expiresAt: null, autoExpiry: false })
-            .where(eq(deployments.id, deployment.id))
-            .run()
-        }
+        tx.update(deployments)
+          .set({ expiresAt: null, autoExpiry: false })
+          .where(and(eq(deployments.id, deployment.id), eq(deployments.autoExpiry, true)))
+          .run()
+        const replacedId =
+          replaced && replaced.deploymentId !== row.deploymentId ? replaced.deploymentId : null
         // The replaced deployment expires later, unless it has an expiry or another alias.
-        if (previousId) {
+        if (replacedId) {
           tx.update(deployments)
             .set({ expiresAt: new Date(now.getTime() + REPLACED_TTL_MS), autoExpiry: true })
             .where(
               and(
-                eq(deployments.id, previousId),
+                eq(deployments.id, replacedId),
                 isNull(deployments.expiresAt),
                 notExists(
                   tx
                     .select({ one: sql`1` })
                     .from(aliases)
-                    .where(eq(aliases.deploymentId, previousId)),
+                    .where(eq(aliases.deploymentId, replacedId)),
                 ),
               ),
             )
             .run()
         }
+        return replacedId
       })
       const previous =
         previousId &&
