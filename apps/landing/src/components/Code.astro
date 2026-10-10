@@ -1,0 +1,18 @@
+---
+// Terminal block. Lines starting with "$ " are commands; the rest is output.
+interface Props {
+  lines: string[]
+  class?: string
+}
+const { lines, class: className } = Astro.props
+---
+
+<pre
+  class:list={[
+    "overflow-x-auto rounded-xl border border-line bg-card p-4 font-mono text-sm leading-6",
+    className,
+  ]}><code>{lines.map((line) => (
+    line.startsWith("$ ")
+      ? <span class="block"><span class="text-muted select-none">$ </span>{line.slice(2)}</span>
+      : <span class="block text-muted">{line}</span>
+  ))}</code></pre>

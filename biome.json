@@ -11,5 +11,15 @@
       "style": { "noNonNullAssertion": "off" },
       "a11y": { "noSvgWithoutTitle": "off" }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": { "noUnusedVariables": "off", "noUnusedImports": "off" }
+        }
+      }
+    }
+  ]
 }
