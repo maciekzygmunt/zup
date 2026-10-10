@@ -1,10 +1,10 @@
+# Builds zup from this repo. To run the published image instead, replace `build: .`
+# with `image: ghcr.io/maciekzygmunt/zup`.
 # Coolify: use the "Docker Compose" build pack, then give the zup service both domains
 # (e.g. https://zup.example.com,https://preview.example.com) on port 3000.
 services:
   zup:
-    image: ghcr.io/maciekzygmunt/zup
-    # To build from this repo instead of pulling the image, replace `image` with:
-    # build: .
+    build: .
     restart: unless-stopped
     environment:
       APP_URL: ${APP_URL:?Set APP_URL, e.g. https://zup.example.com}
