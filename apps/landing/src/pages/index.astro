@@ -37,6 +37,8 @@ const steps = [
 ]
 
 const docker = [
+  "$ git clone https://github.com/maciekzygmunt/zup && cd zup",
+  "$ docker build -t zup .",
   "$ docker run -d -p 3000:3000 -v zup-data:/data \\",
   "    -e APP_URL=https://zup.example.com \\",
   "    -e PREVIEW_URL=https://preview.example.com \\",

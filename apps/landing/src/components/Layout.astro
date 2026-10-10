@@ -1,0 +1,104 @@
+---
+// Shared head, island nav and footer. Also runs the scroll reveal observers.
+import "../styles/global.css"
+
+interface Props {
+  title: string
+  description: string
+}
+const { title, description } = Astro.props
+import { repo } from "../lib/site.ts"
+const path = Astro.url.pathname
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <script is:inline>
+      document.documentElement.classList.add("js")
+    </script>
+  </head>
+  <body class="min-h-dvh">
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2"
+    >
+      Skip to content
+    </a>
+
+    <header class="sticky top-0 z-30 px-4">
+      <div
+        class="mx-auto mt-6 flex w-max max-w-full items-center gap-1 rounded-full border border-line bg-bg/70 p-1 shadow-sm backdrop-blur-xl"
+      >
+        <a
+          href="/"
+          aria-current={path === "/" ? "page" : undefined}
+          class="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 font-mono text-sm font-semibold tracking-wide"
+        >
+          <img src="/favicon.svg" alt="" class="size-6" />
+          zup
+        </a>
+        <nav class="flex items-center text-sm font-semibold" aria-label="Main">
+          <a href="/#how" class="link-quiet rounded-full px-3 py-1">How it works</a>
+          <a href="/#faq" class="link-quiet rounded-full px-3 py-1">FAQ</a>
+          <a
+            href={repo}
+            class="rounded-full bg-fg px-3 py-1 text-bg transition-all duration-700 ease-fluid hover:opacity-85 active:scale-[0.98]"
+          >
+            GitHub
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="border-t border-line">
+      <div
+        class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-muted"
+      >
+        <p>MIT licensed. Built with Bun, Hono, SQLite and React.</p>
+        <nav class="flex flex-wrap gap-6" aria-label="Legal">
+          <a href={`${repo}/blob/main/LICENSE`} class="link-quiet">License</a>
+          <a href={`${repo}/blob/main/SECURITY.md`} class="link-quiet">Security policy</a>
+          <a href={repo} class="link-quiet">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script>
+      // Section reveals: one observer, elements unobserve after they enter.
+      const reveal = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue
+            entry.target.classList.add("in")
+            reveal.unobserve(entry.target)
+          }
+        },
+        { rootMargin: "0px 0px -10% 0px" },
+      )
+      for (const el of document.querySelectorAll(".reveal")) reveal.observe(el)
+
+      // Tagline words: each word switches on as it crosses a line 45% up the viewport.
+      const words = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) entry.target.classList.toggle("in", entry.isIntersecting)
+        },
+        { rootMargin: "0px 0px -45% 0px" },
+      )
+      for (const el of document.querySelectorAll(".tagline .w")) words.observe(el)
+    </script>
+  </body>
+</html>
