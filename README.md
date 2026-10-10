@@ -91,11 +91,13 @@ You need:
 3. A persistent volume at `/data`.
 
 ```sh
-docker build -t zup .
 docker run -d --restart unless-stopped -p 127.0.0.1:3000:3000 -v zup-data:/data \
   -e APP_URL=https://zup.example.com -e PREVIEW_URL=https://preview.example.com \
-  -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) zup
+  -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) ghcr.io/maciekzygmunt/zup
 ```
+
+Image tags: `latest` (main), `X.Y.Z` (releases), `sha-<commit>`. To build it yourself, run
+`docker build -t zup .` and use `zup` as the image name.
 
 Then open `APP_URL` and create your account. Sign-up closes after that.
 
