@@ -2,7 +2,9 @@
 # (e.g. https://zup.example.com,https://preview.example.com) on port 3000.
 services:
   zup:
-    build: .
+    image: ghcr.io/maciekzygmunt/zup
+    # To build from this repo instead of pulling the image, replace `image` with:
+    # build: .
     restart: unless-stopped
     environment:
       APP_URL: ${APP_URL:?Set APP_URL, e.g. https://zup.example.com}
