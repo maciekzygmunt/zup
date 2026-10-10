@@ -1,0 +1,333 @@
+---
+import Clock from "@phosphor-icons/core/assets/regular/clock-countdown.svg"
+import Download from "@phosphor-icons/core/assets/regular/download-simple.svg"
+import Files from "@phosphor-icons/core/assets/regular/files.svg"
+import Hash from "@phosphor-icons/core/assets/regular/hash.svg"
+import Lock from "@phosphor-icons/core/assets/regular/lock-key.svg"
+import Tag from "@phosphor-icons/core/assets/regular/tag.svg"
+import Code from "../components/Code.astro"
+import Layout from "../components/Layout.astro"
+import Shot from "../components/Shot.astro"
+import { repo } from "../lib/site.ts"
+
+const title = "zup — publish a folder, get a URL"
+const description =
+  "zup is a small server you host yourself. Upload static sites and files from the terminal, the dashboard or Claude. Share them private, public or with a password."
+
+const tagline = ["Your files stay on your server.", "The link goes anywhere."]
+
+const steps = [
+  {
+    title: "Install the CLI and log in",
+    text: "Install the CLI from your own server. zup login opens the dashboard, where you approve it once.",
+    lines: [
+      "$ curl -fsSL https://zup.example.com/install.sh | sh",
+      "$ zup login https://zup.example.com",
+    ],
+  },
+  {
+    title: "Publish",
+    text: "Give zup one file or a whole folder. A folder with index.html becomes a website. Only new content is uploaded. You get a URL back.",
+    lines: [
+      "$ zup ./dist --alias demo --public",
+      "",
+      "✓ Published  https://preview.example.com/u/GsM0l7E2bH27oHv4/",
+      "  Alias      https://preview.example.com/demo/",
+      "  Access     public",
+    ],
+  },
+  {
+    title: "Add it to your agent",
+    text: "zup is an MCP server. Add it to Claude Code or Claude Desktop, log in once, and ask it to publish a page, make a share link or move an alias.",
+    lines: [
+      "$ claude mcp add --transport http zup https://zup.example.com/mcp",
+      "$ claude",
+      "> publish ./report as a password protected site",
+    ],
+  },
+]
+
+const docker = [
+  "$ git clone https://github.com/maciekzygmunt/zup && cd zup",
+  "$ docker build -t zup .",
+  "$ docker run -d -p 3000:3000 -v zup-data:/data \\",
+  "    -e APP_URL=https://zup.example.com \\",
+  "    -e PREVIEW_URL=https://preview.example.com \\",
+  "    -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) zup",
+]
+
+const features = [
+  {
+    icon: Hash,
+    title: "Only new files go up",
+    text: "Files are stored by their hash. A second upload of the same site sends only what changed.",
+  },
+  {
+    icon: Lock,
+    title: "Three access levels",
+    text: "Private is only for you. Public is for anyone with the URL. Password is for anyone with the key.",
+  },
+  {
+    icon: Tag,
+    title: "Stable names",
+    text: "An alias like /report always opens the latest upload you point it to. Move it with one command.",
+  },
+  {
+    icon: Clock,
+    title: "Uploads that clean up",
+    text: "Add --expires 7d and the upload deletes itself. Good for previews and one time shares.",
+  },
+  {
+    icon: Files,
+    title: "One file or a whole folder",
+    text: "A single HTML page, a PDF, an image, or a full build folder. Markdown renders. Folders without an index get a clean listing.",
+  },
+  {
+    icon: Download,
+    title: "Pull it back",
+    text: "zup pull downloads a site and checks every file by SHA-256. Each site also has a /_src/ file browser.",
+  },
+]
+
+const access = [
+  {
+    name: "Private",
+    flag: "--private",
+    text: "Only you can open it, through your dashboard login. This is the default.",
+  },
+  {
+    name: "Public",
+    flag: "--public",
+    text: "Anyone with the URL can open it. Nothing else is needed.",
+  },
+  {
+    name: "Password",
+    flag: "--protect",
+    text: "Visitors type a password once. A share link opens the site without typing.",
+  },
+]
+
+const faq = [
+  {
+    q: "What do I need to run it?",
+    a: "A host that runs one Docker container, two domains pointed at it and a volume for /data. Coolify, Docker Compose or plain docker run all work.",
+  },
+  {
+    q: "Why two domains?",
+    a: "The dashboard and API live on one host. Uploaded sites live on the other. A page you upload can run JavaScript, and the split means it can never read your dashboard session.",
+  },
+  {
+    q: "How many accounts does it support?",
+    a: "One. The first account created is the owner, and sign up closes after that. zup is a personal publishing box, not a team product.",
+  },
+  {
+    q: "Where is my data?",
+    a: "In one volume. A SQLite file holds accounts, sessions, deployments and aliases. A blobs folder holds file contents named by SHA-256. Back up that volume and you have everything.",
+  },
+  {
+    q: "What does the CLI upload?",
+    a: "Only content the server does not already have. Each file is hashed first, so a second deploy of a site with one changed page sends one file.",
+  },
+  {
+    q: "How does the password option work?",
+    a: "A visitor types the password once and this browser keeps access for 30 days. You can also send a share link that unlocks the site without typing.",
+  },
+  {
+    q: "How does it work with Claude?",
+    a: "zup exposes an MCP endpoint with OAuth login. Add it to Claude Code or Claude Desktop, approve it once, then ask Claude to publish pages, make share links or move aliases.",
+  },
+  {
+    q: "Can I get my files out again?",
+    a: "Yes. zup pull downloads a whole site and verifies every file. Every site also has a /_src/ path with a file browser and raw downloads.",
+  },
+  {
+    q: "What does it cost?",
+    a: "Nothing. zup is MIT licensed and runs on your own server. There is no hosted plan and no account with us.",
+  },
+]
+---
+
+<Layout title={title} description={description}>
+  <!-- Hero -->
+  <section class="mx-auto max-w-5xl px-6 pt-20 pb-16 sm:pt-28">
+    <h1 class="hero-title max-w-[680px] text-4xl font-semibold tracking-tight sm:text-6xl">
+      Publish a folder.<br />Get a URL.
+    </h1>
+    <p class="mt-6 max-w-[680px] text-lg text-muted">
+      zup is a small server you host yourself. Upload static sites and files from your terminal,
+      the dashboard or Claude. Share them private, public or with a password.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center gap-6">
+      <a href={`${repo}#readme`} class="btn-primary">Deploy your own</a>
+      <a href={repo} class="link-quiet text-base">Read the source</a>
+    </div>
+    <ul class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted" aria-label="Facts">
+      <li>MIT licensed</li>
+      <li>One Docker container</li>
+      <li>Works with Claude Code</li>
+    </ul>
+    <Code
+      class="mt-12"
+      lines={[
+        "$ zup report.html --public",
+        "",
+        "✓ Published  https://preview.example.com/u/LHh0yEuOtAzoftWv/",
+        "  Access     public",
+      ]}
+    />
+  </section>
+
+  <!-- Dashboard -->
+  <section class="reveal mx-auto max-w-5xl px-6 pb-24">
+    <Shot
+      name="sites"
+      alt="The zup dashboard listing three sites with their access level, alias, size and expiry"
+      width={1280}
+      height={469}
+    />
+    <p class="mt-4 text-sm text-muted">
+      The dashboard lists every upload. Drag a folder onto it to publish from the browser.
+    </p>
+  </section>
+
+  <!-- How it works -->
+  <section id="how" class="border-t border-line">
+    <div class="mx-auto max-w-5xl px-6 py-24">
+      <div class="reveal">
+        <h2 class="text-3xl font-semibold tracking-tight">How it works</h2>
+        <p class="mt-4 max-w-[680px] text-muted">
+          One container serves two hosts. The dashboard, API and CLI login live on one domain.
+          Uploaded sites live on another, so a page you upload can never read your login.
+        </p>
+      </div>
+      <ol class="mt-12 grid gap-12">
+        {
+          steps.map((step, i) => (
+            <li class="reveal grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-12">
+              <div>
+                <p class="font-mono text-sm text-accent">0{i + 1}</p>
+                <h3 class="mt-2 text-xl font-semibold">{step.title}</h3>
+                <p class="mt-2 text-muted">{step.text}</p>
+              </div>
+              <Code lines={step.lines} />
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <!-- Tagline -->
+  <section class="border-t border-line" aria-label="Tagline">
+    <div class="mx-auto max-w-5xl px-6 py-32">
+      <p class="tagline max-w-[680px] text-4xl font-semibold tracking-tight sm:text-5xl">
+        {
+          tagline.map((line, i) => (
+            <>
+              {i > 0 && <br />}
+              {line.split(" ").map((word) => (
+                <span class="w">{word} </span>
+              ))}
+            </>
+          ))
+        }
+      </p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="border-t border-line">
+    <div class="mx-auto max-w-5xl px-6 py-24">
+      <h2 class="reveal text-3xl font-semibold tracking-tight">Small, but complete</h2>
+      <ul class="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          features.map((f) => (
+            <li class="reveal">
+              <f.icon class="size-6 text-accent" aria-hidden="true" />
+              <h3 class="mt-4 font-semibold">{f.title}</h3>
+              <p class="mt-2 text-sm text-muted">{f.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <!-- Access -->
+  <section class="border-t border-line">
+    <div class="mx-auto max-w-5xl px-6 py-24">
+      <div class="reveal">
+        <h2 class="text-3xl font-semibold tracking-tight">You decide who can open it</h2>
+        <p class="mt-4 max-w-[680px] text-muted">
+          Each upload and each alias has its own access level. Change it at any time from the CLI
+          or the dashboard.
+        </p>
+      </div>
+      <ul class="mt-12 grid gap-4 sm:grid-cols-3">
+        {
+          access.map((a) => (
+            <li class="reveal rounded-xl border border-line bg-card p-6">
+              <div class="flex items-baseline justify-between gap-4">
+                <h3 class="font-semibold">{a.name}</h3>
+                <code class="font-mono text-xs text-muted">{a.flag}</code>
+              </div>
+              <p class="mt-3 text-sm text-muted">{a.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+      <div class="reveal mt-12">
+        <Shot
+          name="site"
+          alt="A site page in the zup dashboard with its URL, password access, share link, details, alias and files"
+          width={1280}
+          height={683}
+        />
+      </div>
+    </div>
+  </section>
+
+  <!-- Deploy -->
+  <section id="deploy" class="border-t border-line">
+    <div class="mx-auto max-w-5xl px-6 py-24">
+      <div class="reveal">
+        <h2 class="text-3xl font-semibold tracking-tight">Your server, your data</h2>
+        <p class="mt-4 max-w-[680px] text-muted">
+          One Docker image. Point two domains at it: one for the dashboard, one for the sites. One
+          SQLite file and a folder of blobs live in a single volume. Back up that volume and you
+          have everything.
+        </p>
+      </div>
+      <Code class="reveal mt-8" lines={docker} />
+      <div class="reveal mt-8 flex flex-wrap items-center gap-6">
+        <a href={`${repo}#readme`} class="btn-primary">Deploy your own</a>
+        <a href={repo} class="link-quiet text-base">Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+  <!-- FAQ -->
+  <section id="faq" class="border-t border-line">
+    <div class="mx-auto max-w-5xl px-6 py-24">
+      <h2 class="reveal text-3xl font-semibold tracking-tight">Questions</h2>
+      <div class="reveal mt-12 max-w-[680px] divide-y divide-line border-y border-line">
+        {
+          faq.map((item) => (
+            <details class="group py-4">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-6 font-semibold [&::-webkit-details-marker]:hidden">
+                <h3 class="font-semibold">{item.q}</h3>
+                <span
+                  class="text-muted transition-transform duration-700 ease-fluid group-open:rotate-45"
+                  aria-hidden="true"
+                >
+                  +
+                </span>
+              </summary>
+              <p class="mt-3 text-muted">{item.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+</Layout>

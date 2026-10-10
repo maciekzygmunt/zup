@@ -1,0 +1,22 @@
+---
+// Dashboard screenshot (dark, like the page).
+interface Props {
+  name: string
+  alt: string
+  width: number
+  height: number
+}
+const { name, alt, width, height } = Astro.props
+---
+
+<figure class="overflow-hidden rounded-xl border border-line bg-card shadow-sm">
+  <img
+      src={`/screens/${name}-dark.png`}
+      alt={alt}
+      width={width}
+      height={height}
+      loading="lazy"
+      decoding="async"
+      class="block w-full"
+    />
+</figure>
