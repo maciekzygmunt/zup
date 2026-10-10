@@ -24,7 +24,7 @@ import {
 } from "./site-dialogs.tsx"
 import { buttonClass } from "./ui.tsx"
 
-// Creates a fresh `#share=` link for a password-protected deployment or alias and copies it.
+// Creates a fresh `#token=` link for a password-protected deployment or alias and copies it.
 export async function copyShareLink(target: { deploymentId: string } | { alias: string }) {
   try {
     const { shareUrl } = await parseResponse(api["share-links"].$post({ json: target }))

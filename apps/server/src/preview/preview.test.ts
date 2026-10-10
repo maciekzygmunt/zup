@@ -132,12 +132,12 @@ describe("access", () => {
     )
     const base = `/u/${deployment.id}`
     expect((await get(`${base}/`, html)).status).toBe(401)
-    const unlock = (key: string) =>
+    const unlock = (password: string) =>
       server.fetch(
         new Request(`http://127.0.0.1:4100${base}/_zup/unlock`, {
           method: "POST",
           headers: { host: "127.0.0.1:4100" },
-          body: new URLSearchParams({ key, next: `${base}/` }),
+          body: new URLSearchParams({ password, next: `${base}/` }),
         }),
       )
     expect((await unlock("wrong key")).status).toBe(401)
@@ -164,12 +164,12 @@ describe("access", () => {
     expect(moved.alias.access).toBe("password")
     expect(moved.key).toBeUndefined()
     const share = await server.sites.shareLink({ alias: "demo" })
-    const token = share.shareUrl.split("#share=")[1]!
+    const token = share.shareUrl.split("#token=")[1]!
     const unlocked = await server.fetch(
       new Request("http://127.0.0.1:4100/demo/_zup/unlock", {
         method: "POST",
         headers: { host: "127.0.0.1:4100" },
-        body: new URLSearchParams({ share: token, next: "/demo/" }),
+        body: new URLSearchParams({ token, next: "/demo/" }),
       }),
     )
     const cookie = unlocked.headers.get("set-cookie")!.split(";")[0]!

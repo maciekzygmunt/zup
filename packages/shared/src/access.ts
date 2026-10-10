@@ -13,6 +13,21 @@ export const accessInputSchema = z.discriminatedUnion("type", [
 ])
 export type AccessInput = z.infer<typeof accessInputSchema>
 
+// No 0/o or 1/i/l, so generated passwords are easy to read and type.
+const keyAlphabet = "23456789abcdefghjkmnpqrstuvwxyz"
+
+// A generated password: four groups of five characters, e.g. "k7m2p-x9qte-4hwna-c3vzr" (~99 bits).
+export function generateKey(): string {
+  let key = ""
+  while (key.length < 20) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(32))) {
+      // 248 = 8 × 31: bytes above it are skipped so every character is equally likely.
+      if (byte < 248 && key.length < 20) key += keyAlphabet[byte % keyAlphabet.length]
+    }
+  }
+  return key.match(/.{5}/g)!.join("-")
+}
+
 // Top-level preview paths that can never be alias names.
 export const reservedAliasNames = new Set([
   "u",

@@ -1,13 +1,10 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto"
+import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 
-// Password-protected sites. Only an argon2id hash of the key is stored. Unlock cookies
-// and share links are MACs keyed by that hash, so changing the key invalidates all of them.
+// Password-protected sites. The server stores only an argon2id hash of the password.
+// A visitor with the password (or a share link) gets a signed cookie for that one site.
 
 export const unlockCookieName = "zup_unlock"
-export const unlockTtlMs = 30 * 24 * 60 * 60 * 1000
-
-// 18 random bytes = 24 base64url characters.
-export const generateKey = () => randomBytes(18).toString("base64url")
+export const unlockMaxAgeSeconds = 30 * 24 * 60 * 60
 
 export const hashPassword = (password: string) =>
   Bun.password.hash(password, { algorithm: "argon2id" })
@@ -15,39 +12,42 @@ export const hashPassword = (password: string) =>
 export const verifyPassword = (password: string, hash: string) =>
   Bun.password.verify(password, hash).catch(() => false)
 
-const mac = (key: string, message: string) =>
-  createHmac("sha256", key).update(message).digest("base64url")
-
-function safeEqual(a: string, b: string) {
-  const left = Buffer.from(a)
-  const right = Buffer.from(b)
-  return left.length === right.length && timingSafeEqual(left, right)
-}
-
-// What a cookie or share link is bound to, so one site's never opens another.
+// The site that a cookie or link opens. A deployment and its aliases are separate sites.
 export const siteScope = (target: { alias: string } | { deploymentId: string }) =>
-  "alias" in target ? `a:${target.alias}` : `u:${target.deploymentId}`
+  "alias" in target ? `alias:${target.alias}` : `deployment:${target.deploymentId}`
 
-export function createUnlockToken(passwordHash: string, scope: string, now = Date.now()) {
-  const expiresAt = now + unlockTtlMs
-  return `${expiresAt}.${mac(passwordHash, `unlock|${scope}|${expiresAt}`)}`
-}
+// Changes with every new password, so old cookies and links stop working.
+const fingerprint = (passwordHash: string) =>
+  createHash("sha256").update(passwordHash).digest("base64url").slice(0, 12)
 
-export function verifyUnlockToken(
-  token: string | undefined,
-  passwordHash: string,
+// Cookie payload: site, password fingerprint and expiry (unix seconds). The caller signs it.
+export const unlockGrant = (scope: string, passwordHash: string, now = Date.now()) =>
+  `${scope}|${fingerprint(passwordHash)}|${Math.floor(now / 1000) + unlockMaxAgeSeconds}`
+
+export function grantOpens(
+  grant: string | false | undefined,
   scope: string,
+  passwordHash: string,
   now = Date.now(),
 ) {
-  const [expiresText, signature] = token?.split(".") ?? []
-  const expiresAt = Number(expiresText)
-  if (!signature || !Number.isSafeInteger(expiresAt) || expiresAt <= now) return false
-  return safeEqual(signature, mac(passwordHash, `unlock|${scope}|${expiresAt}`))
+  const [grantScope, print, expires] = grant ? grant.split("|") : []
+  return grantScope === scope && print === fingerprint(passwordHash) && Number(expires) * 1000 > now
 }
 
-export const createShareToken = (passwordHash: string, scope: string) =>
-  `v1.${mac(passwordHash, `share|${scope}`)}`
+// Share link token: a server MAC over the site and the password hash.
+export const shareToken = (secret: string, scope: string, passwordHash: string) =>
+  createHmac("sha256", secret)
+    .update(`zup share link\n${scope}\n${passwordHash}`)
+    .digest("base64url")
+    .slice(0, 32)
 
-export function verifyShareToken(token: string | undefined, passwordHash: string, scope: string) {
-  return !!token && safeEqual(token, createShareToken(passwordHash, scope))
+export function shareTokenOpens(
+  token: string,
+  secret: string,
+  scope: string,
+  passwordHash: string,
+) {
+  const expected = Buffer.from(shareToken(secret, scope, passwordHash))
+  const actual = Buffer.from(token)
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
 }

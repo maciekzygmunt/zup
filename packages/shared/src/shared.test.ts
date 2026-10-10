@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { aliasNameSchema } from "./access.ts"
+import { aliasNameSchema, generateKey } from "./access.ts"
 import { parseExpiry } from "./duration.ts"
 import { inferEntrypoint, isValidManifestPath, toManifestPath } from "./paths.ts"
 
@@ -40,4 +40,8 @@ test("alias names are slugs and not reserved", () => {
   for (const bad of ["Weekly", "-x", "x-", "u", "_zup", "a b"]) {
     expect(aliasNameSchema.safeParse(bad).success).toBe(false)
   }
+})
+
+test("generated keys are four groups of five readable characters", () => {
+  expect(generateKey()).toMatch(/^[2-9a-hjkmnp-z]{5}(-[2-9a-hjkmnp-z]{5}){3}$/)
 })

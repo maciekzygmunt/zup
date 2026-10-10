@@ -1,5 +1,4 @@
-import { randomBytes } from "node:crypto"
-import type { AccessInput } from "@zup/shared"
+import { type AccessInput, generateKey } from "@zup/shared"
 import { CliError } from "./ui.ts"
 
 export type AccessFlags = {
@@ -25,7 +24,7 @@ export function accessFromFlags(flags: AccessFlags): AccessInput | undefined {
   if (flags.protect) {
     return {
       type: "password",
-      password: process.env.ZUP_PASSWORD || randomBytes(18).toString("base64url"),
+      password: process.env.ZUP_PASSWORD || generateKey(),
     }
   }
   return undefined

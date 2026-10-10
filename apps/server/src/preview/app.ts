@@ -1,8 +1,9 @@
+import { createHmac } from "node:crypto"
 import { isMarkdownPath, isTextContentType } from "@zup/shared"
 import { and, eq, like } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
-import { getCookie, setCookie } from "hono/cookie"
+import { getCookie, getSignedCookie, setCookie, setSignedCookie } from "hono/cookie"
 import MarkdownIt from "markdown-it"
 import type { BlobStore } from "../blobs.ts"
 import type { Config } from "../config.ts"
@@ -15,13 +16,13 @@ import {
   deployments,
 } from "../db/schema.ts"
 import {
-  createUnlockToken,
+  grantOpens,
+  shareTokenOpens,
   siteScope,
   unlockCookieName,
-  unlockTtlMs,
+  unlockGrant,
+  unlockMaxAgeSeconds,
   verifyPassword,
-  verifyShareToken,
-  verifyUnlockToken,
 } from "../passwords.ts"
 import { createRateLimiter } from "../rateLimit.ts"
 import { type OwnerSessions, ownerCookieName, safePath } from "./owner.ts"
@@ -59,6 +60,10 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     "*",
     bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.text("Request body is too large", 413) }),
   )
+  // Own key for unlock cookies, so no other signed value can pass as one.
+  const unlockCookieKey = createHmac("sha256", config.BETTER_AUTH_SECRET)
+    .update("zup unlock cookie")
+    .digest()
   const unlockPerIp = createRateLimiter(10, 60_000)
   const unlockPerSite = createRateLimiter(60, 60_000)
 
@@ -142,7 +147,8 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     if (await isOwner(c)) return null
     const next = new URL(c.req.url).pathname
     if (access === "password" && passwordHash) {
-      if (verifyUnlockToken(getCookie(c, unlockCookieName), passwordHash, site.scope)) return null
+      const grant = await getSignedCookie(c, unlockCookieKey, unlockCookieName)
+      if (grantOpens(grant, site.scope, passwordHash)) return null
       if (!wantsHtml(c)) return c.json({ error: "password_required" }, 401)
       return html(c, unlockPage({ action: `${site.base}/_zup/unlock`, next }), 401)
     }
@@ -365,28 +371,34 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
         unlockPage({
           action,
           next: target,
-          error: "Too many attempts. Wait a minute and try again.",
+          error: "Too many tries. Try again in one minute.",
         }),
         429,
       )
     }
-    const share = field("share")
-    const valid = share
-      ? verifyShareToken(share, passwordHash, site.scope)
-      : await verifyPassword(field("key"), passwordHash)
+    const token = field("token")
+    const valid = token
+      ? shareTokenOpens(token, config.BETTER_AUTH_SECRET, site.scope, passwordHash)
+      : await verifyPassword(field("password"), passwordHash)
     if (!valid) {
-      const error = share
-        ? "This link is no longer valid. Ask for a new one or enter the password."
-        : "Wrong password. Try again."
+      const error = token
+        ? "This link does not work anymore. Enter the password, or ask for a new link."
+        : "That password is not correct."
       return html(c, unlockPage({ action, next: target, error }), 401)
     }
-    setCookie(c, unlockCookieName, createUnlockToken(passwordHash, site.scope), {
-      path: site.base,
-      httpOnly: true,
-      secure: config.secureCookies,
-      sameSite: "Lax",
-      maxAge: unlockTtlMs / 1000,
-    })
+    await setSignedCookie(
+      c,
+      unlockCookieName,
+      unlockGrant(site.scope, passwordHash),
+      unlockCookieKey,
+      {
+        path: site.base,
+        httpOnly: true,
+        secure: config.secureCookies,
+        sameSite: "Lax",
+        maxAge: unlockMaxAgeSeconds,
+      },
+    )
     return c.redirect(target, 303)
   }
 

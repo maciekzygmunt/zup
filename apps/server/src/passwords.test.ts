@@ -1,15 +1,16 @@
 import { expect, test } from "bun:test"
 import {
-  createShareToken,
-  createUnlockToken,
+  grantOpens,
   hashPassword,
+  shareToken,
+  shareTokenOpens,
   siteScope,
-  unlockTtlMs,
+  unlockGrant,
+  unlockMaxAgeSeconds,
   verifyPassword,
-  verifyShareToken,
-  verifyUnlockToken,
 } from "./passwords.ts"
 
+const secret = "test-secret-that-is-long-enough-1234567890"
 const scope = siteScope({ alias: "report" })
 
 test("passwords verify only against their own hash", async () => {
@@ -19,21 +20,21 @@ test("passwords verify only against their own hash", async () => {
   expect(await verifyPassword("correct horse", "garbage")).toBe(false)
 })
 
-test("unlock cookies are bound to one site, one key and expire", async () => {
+test("grants open one site, for one password, until they expire", async () => {
   const hash = await hashPassword("correct horse")
   const now = Date.now()
-  const token = createUnlockToken(hash, scope, now)
-  expect(verifyUnlockToken(token, hash, scope, now)).toBe(true)
-  expect(verifyUnlockToken(token, hash, siteScope({ alias: "other" }), now)).toBe(false)
-  expect(verifyUnlockToken(token, await hashPassword("correct horse"), scope, now)).toBe(false)
-  expect(verifyUnlockToken(token, hash, scope, now + unlockTtlMs + 1)).toBe(false)
-  expect(verifyUnlockToken(undefined, hash, scope)).toBe(false)
+  const grant = unlockGrant(scope, hash, now)
+  expect(grantOpens(grant, scope, hash, now)).toBe(true)
+  expect(grantOpens(grant, siteScope({ alias: "other" }), hash, now)).toBe(false)
+  expect(grantOpens(grant, scope, await hashPassword("correct horse"), now)).toBe(false)
+  expect(grantOpens(grant, scope, hash, now + unlockMaxAgeSeconds * 1000 + 1000)).toBe(false)
+  expect(grantOpens(false, scope, hash)).toBe(false)
 })
 
-test("share tokens cannot pass as unlock cookies and die with the key", async () => {
+test("share tokens stop working when the password changes", async () => {
   const hash = await hashPassword("correct horse")
-  const share = createShareToken(hash, scope)
-  expect(verifyShareToken(share, hash, scope)).toBe(true)
-  expect(verifyUnlockToken(share, hash, scope)).toBe(false)
-  expect(verifyShareToken(share, await hashPassword("new key 123"), scope)).toBe(false)
+  const token = shareToken(secret, scope, hash)
+  expect(shareTokenOpens(token, secret, scope, hash)).toBe(true)
+  expect(shareTokenOpens(token, secret, siteScope({ alias: "other" }), hash)).toBe(false)
+  expect(shareTokenOpens(token, secret, scope, await hashPassword("new key 123"))).toBe(false)
 })

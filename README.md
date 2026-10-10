@@ -54,7 +54,8 @@ docker run -d -p 3000:3000 -v zup-data:/data \
   -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) zup
 ```
 
-Keep `BETTER_AUTH_SECRET` stable: changing it logs everyone out and invalidates MCP signing keys.
+Keep `BETTER_AUTH_SECRET` stable: changing it logs everyone out, ends share links and unlock
+cookies of password sites, and invalidates MCP signing keys.
 The container runs as user `bun` (uid 1000); a bind mount for `/data` must be writable by it.
 
 ### Backups
@@ -122,7 +123,7 @@ Environment: `ZUP_SERVER`, `ZUP_TOKEN` (for CI), `ZUP_PASSWORD` (used by `--prot
 A deployment and each alias have their own access. `zup ./dist --public --alias demo` sets both.
 
 **Password sites.** Visitors get a password form. A correct password is remembered for 30 days
-(a cookie for that one site). Share links (`…/#key=…` or `…/#share=…`) unlock without typing; the
+(a cookie for that one site). Share links (`…/#password=…` or `…/#token=…`) unlock without typing; the
 part after `#` never reaches the server or its logs. Only a hash of the password is stored, so a
 lost password cannot be shown again — `zup share` (or *Copy share link* in the dashboard) makes a
 working link at any time. Setting a new password ends all old links and cookies.

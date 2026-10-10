@@ -108,34 +108,32 @@ ${action}
   })
 }
 
-// A share link `<url>#key=...` or `#share=...` unlocks without typing. The fragment never
-// reaches the server, so the key stays out of request logs.
-export const unlockScript = `
-const match = location.hash.match(/(?:^#|&)(key|share)=([^&]+)/);
-if (match) {
+// Share links put the password or a token after "#", which browsers never send to the
+// server. This script moves it into the form, removes it from the address bar and submits.
+const unlockScript = `
+const params = new URLSearchParams(location.hash.slice(1));
+const form = document.forms.unlock;
+const name = ["token", "password"].find((field) => params.get(field));
+if (name) {
   history.replaceState(null, "", location.pathname + location.search);
-  const form = document.getElementById("unlock");
-  form.elements[match[1]].value = decodeURIComponent(match[2]);
+  form.elements[name].value = params.get(name);
   form.submit();
 }`
 
 export function unlockPage(options: { action: string; next: string; error?: string }) {
-  const error = options.error
-    ? `<p class="error" role="alert">${escapeHtml(options.error)}</p>`
-    : ""
   return page({
     title: "Password required",
     script: unlockScript,
     body: `<main class="center"><div class="box">
 <p class="mark">zup</p>
-<h1>This page is password protected</h1>
-<p class="lede">Enter the password you got with the link. This browser remembers it for 30 days.</p>
-${error}
-<form id="unlock" method="post" action="${escapeHtml(options.action)}">
+<h1>Enter the password</h1>
+<p class="lede">You need a password to open this page. This browser keeps access for 30 days.</p>
+${options.error ? `<p class="error" role="alert">${escapeHtml(options.error)}</p>` : ""}
+<form name="unlock" method="post" action="${escapeHtml(options.action)}">
+<input type="password" name="password" aria-label="Password" placeholder="Password" autocomplete="current-password" autofocus required>
+<input type="hidden" name="token">
 <input type="hidden" name="next" value="${escapeHtml(options.next)}">
-<input type="hidden" name="share" value="">
-<input type="password" name="key" autocomplete="current-password" aria-label="Password" placeholder="Password" required autofocus>
-<button type="submit">Unlock</button>
+<button type="submit">Open page</button>
 </form>
 </div></main>`,
   })

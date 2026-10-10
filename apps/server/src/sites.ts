@@ -6,6 +6,7 @@ import {
   type DeploymentDetail,
   type DeploymentSummary,
   type GrantedKey,
+  generateKey,
   inferEntrypoint,
   isHtmlPath,
   type ManifestFile,
@@ -20,7 +21,7 @@ import type { Db } from "./db/client.ts"
 import { type Alias, aliases, type Deployment, deploymentFiles, deployments } from "./db/schema.ts"
 import { HttpError } from "./errors.ts"
 import { deploymentId } from "./ids.ts"
-import { createShareToken, generateKey, hashPassword, siteScope } from "./passwords.ts"
+import { hashPassword, shareToken, siteScope } from "./passwords.ts"
 
 export type SiteService = ReturnType<typeof createSiteService>
 export type ShareTarget = { deploymentId: string } | { alias: string }
@@ -52,7 +53,7 @@ export function createSiteService({
     return {
       access: "password",
       passwordHash: await hashPassword(key),
-      key: { key, shareUrl: `${urlFor(target)}#key=${encodeURIComponent(key)}` },
+      key: { key, shareUrl: `${urlFor(target)}#password=${encodeURIComponent(key)}` },
     }
   }
 
@@ -331,8 +332,8 @@ export function createSiteService({
         throw new HttpError(409, "not_password_protected", "This site is not password protected")
       }
       const url = urlFor(target)
-      const token = createShareToken(record.passwordHash, siteScope(target))
-      return { url, shareUrl: `${url}#share=${token}` }
+      const token = shareToken(config.BETTER_AUTH_SECRET, siteScope(target), record.passwordHash)
+      return { url, shareUrl: `${url}#token=${token}` }
     },
 
     async stats() {

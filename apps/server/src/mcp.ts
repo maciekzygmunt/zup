@@ -5,6 +5,7 @@ import {
   accessTypes,
   aliasNameSchema,
   contentTypeFor,
+  generateKey,
   isTextContentType,
   type ManifestFile,
   parseExpiry,
@@ -15,7 +16,6 @@ import type { Auth } from "./auth.ts"
 import type { BlobStore } from "./blobs.ts"
 import type { Config } from "./config.ts"
 import { HttpError } from "./errors.ts"
-import { generateKey } from "./passwords.ts"
 import type { SiteService } from "./sites.ts"
 
 type Deps = { config: Config; auth: Auth; blobs: BlobStore; sites: SiteService }
