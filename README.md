@@ -6,6 +6,8 @@
 
 <p align="center">Self-hosted publishing for static files and sites. Run <code>zup ./dist</code> and get a URL.</p>
 
+<p align="center"><a href="https://preview.zygmunt.xyz/zup/">Website</a></p>
+
 - **CLI** — uploads only new content (content-addressed) and prints the URL.
 - **Access** — private (only you), public, or password (with share links that unlock without typing).
 - **Aliases** — stable names like `https://preview.example.com/report/` that you move to a new upload.
