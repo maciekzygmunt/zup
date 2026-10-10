@@ -15,11 +15,11 @@ export const hrefFor = (base: string, path: string) =>
 
 const css = `
 :root { color-scheme: light dark; --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4;
-  --card: #fff; --accent: #4f46e5; --danger: #dc2626; --code: #f5f5f4;
+  --card: #fff; --accent: #4d7c0f; --danger: #dc2626; --code: #f5f5f4;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; }
 @media (prefers-color-scheme: dark) { :root { --bg: #0c0a09; --fg: #f5f5f4; --muted: #a8a29e;
-  --line: #292524; --card: #1c1917; --accent: #818cf8; --danger: #f87171; --code: #1c1917; } }
+  --line: #292524; --card: #1c1917; --accent: #a3e635; --danger: #f87171; --code: #1c1917; } }
 * { box-sizing: border-box; }
 html { -webkit-font-smoothing: antialiased; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
