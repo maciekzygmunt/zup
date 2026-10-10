@@ -18,6 +18,17 @@ const tagline = ["Your files stay on your server.", "The link goes anywhere."]
 
 const steps = [
   {
+    title: "Run the server",
+    text: "Run one Docker container on your server. Point two domains at it, one for the dashboard and one for the sites. Everything lives in the /data volume.",
+    lines: [
+      "$ docker run -d -p 3000:3000 -v zup-data:/data \\",
+      "    -e APP_URL=https://zup.example.com \\",
+      "    -e PREVIEW_URL=https://preview.example.com \\",
+      "    -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \\",
+      "    ghcr.io/maciekzygmunt/zup",
+    ],
+  },
+  {
     title: "Install the CLI and log in",
     text: "Install the CLI from your own server. zup login opens the dashboard, where you approve it once.",
     lines: [
@@ -45,14 +56,6 @@ const steps = [
       "> publish ./report as a password protected site",
     ],
   },
-]
-
-const docker = [
-  "$ docker run -d -p 3000:3000 -v zup-data:/data \\",
-  "    -e APP_URL=https://zup.example.com \\",
-  "    -e PREVIEW_URL=https://preview.example.com \\",
-  "    -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \\",
-  "    ghcr.io/maciekzygmunt/zup",
 ]
 
 const features = [
@@ -297,7 +300,6 @@ const faq = [
           have everything.
         </p>
       </div>
-      <Code class="reveal mt-8" lines={docker} />
       <div class="reveal mt-8 flex flex-wrap items-center gap-6">
         <a href={`${repo}#deploy`} class="btn-primary">Deploy your own</a>
         <a href={repo} class="link-quiet text-base">Star on GitHub</a>
