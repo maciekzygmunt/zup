@@ -14,6 +14,8 @@ export const deployments = sqliteTable("deployments", {
   source: text({ enum: ["cli", "web", "mcp"] }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+  // The expiry was set because an alias moved away. An alias pointing here again clears it.
+  autoExpiry: integer("auto_expiry", { mode: "boolean" }).notNull().default(false),
 })
 
 export const deploymentFiles = sqliteTable(
