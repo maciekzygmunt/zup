@@ -17,6 +17,7 @@ const envSchema = z.object({
   MAX_FILES: bytes(10_000),
   MCP_MAX_BODY_BYTES: bytes(64 * 1024 ** 2),
   // Header with the client IP set by the reverse proxy (Traefik in Coolify).
+  // Empty: use the socket address (no proxy in front).
   CLIENT_IP_HEADER: z.string().default("x-forwarded-for"),
 })
 

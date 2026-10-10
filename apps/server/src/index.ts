@@ -9,7 +9,7 @@ Bun.serve({
   // Blob uploads stream one file per request.
   maxRequestBodySize: config.MAX_FILE_BYTES + 1024 * 1024,
   idleTimeout: 255,
-  fetch: server.fetch,
+  fetch: (request, bun) => server.fetch(request, bun.requestIP(request)?.address),
 })
 
 setInterval(server.cleanup, 60 * 60 * 1000).unref()

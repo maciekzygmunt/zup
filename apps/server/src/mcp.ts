@@ -5,9 +5,9 @@ import {
   accessTypes,
   aliasNameSchema,
   contentTypeFor,
+  createDeploymentSchema,
   generateKey,
   isTextContentType,
-  type ManifestFile,
   parseExpiry,
   toManifestPath,
 } from "@zup/shared"
@@ -40,7 +40,11 @@ async function run(body: () => Promise<unknown>) {
     return text(await body())
   } catch (error) {
     const message =
-      error instanceof HttpError || error instanceof Error ? error.message : String(error)
+      error instanceof z.ZodError
+        ? z.prettifyError(error)
+        : error instanceof HttpError || error instanceof Error
+          ? error.message
+          : String(error)
     return { ...text({ error: message }), isError: true }
   }
 }
@@ -96,34 +100,33 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         },
         (input) =>
           run(async () => {
-            const manifest: ManifestFile[] = []
-            for (const file of input.files) {
+            const uploads = input.files.map((file) => {
               const bytes =
                 file.encoding === "base64"
                   ? Buffer.from(file.content, "base64")
                   : Buffer.from(file.content, "utf8")
               const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
-              if ((await blobs.size(hash)) === null) {
-                await blobs.write(hash, new Blob([bytes]).stream(), config.MAX_FILE_BYTES)
-              }
               const path = toManifestPath(file.path)
-              manifest.push({
-                path,
-                hash,
-                size: bytes.byteLength,
-                contentType: file.contentType ?? contentTypeFor(path),
-              })
-            }
+              const contentType = file.contentType ?? contentTypeFor(path)
+              return { bytes, file: { path, hash, size: bytes.byteLength, contentType } }
+            })
+            // Same checks as the REST API: paths and content types come from the model.
             const access = toAccess(input.access)
-            const { deployment, key } = await sites.createDeployment({
+            const deploymentInput = createDeploymentSchema.parse({
               title: input.title,
-              files: manifest,
+              files: uploads.map((upload) => upload.file),
               entrypoint: input.entrypoint ? toManifestPath(input.entrypoint) : undefined,
               spa: input.spa,
               access,
               expiresAt: input.expires ? parseExpiry(input.expires).toISOString() : undefined,
               source: "mcp",
             })
+            for (const { bytes, file } of uploads) {
+              if ((await blobs.size(file.hash)) === null) {
+                await blobs.write(file.hash, new Blob([bytes]).stream(), config.MAX_FILE_BYTES)
+              }
+            }
+            const { deployment, key } = await sites.createDeployment(deploymentInput)
             const alias = input.alias
               ? await sites.putAlias(input.alias, {
                   deploymentId: deployment.id,

@@ -5,8 +5,9 @@ import { bodyLimit } from "hono/body-limit"
 import { serveStatic } from "hono/bun"
 import { secureHeaders } from "hono/secure-headers"
 import { createApiRoutes } from "./api/routes.ts"
-import { createAuth, migrateAuth } from "./auth.ts"
+import { clientIpHeader, createAuth, migrateAuth } from "./auth.ts"
 import { createBlobStore } from "./blobs.ts"
+import { type RequestEnv, resolveClientIp } from "./clientIp.ts"
 import type { Config } from "./config.ts"
 import { openDatabase } from "./db/client.ts"
 import { HttpError } from "./errors.ts"
@@ -48,8 +49,16 @@ export async function createServer(config: Config) {
   const sites = createSiteService({ config, db, blobs })
   const owners = createOwnerSessions(config, auth)
 
-  const app = new Hono()
+  const app = new Hono<{ Bindings: RequestEnv }>()
   app.get("/healthz", (c) => c.text("ok"))
+
+  // Better Auth reads the client IP from a header, so hand it the resolved one.
+  const authRequest = (c: Context<{ Bindings: RequestEnv }>) => {
+    const headers = new Headers(c.req.raw.headers)
+    headers.delete(clientIpHeader)
+    if (c.env.clientIp) headers.set(clientIpHeader, c.env.clientIp)
+    return new Request(c.req.raw, { headers })
+  }
 
   // File content goes to PUT /api/blobs (streamed, own limit) and /mcp (own limit).
   const tooLarge = (c: Context) =>
@@ -60,7 +69,7 @@ export async function createServer(config: Config) {
     return bodyLimit({ maxSize: 32 * 1024 * 1024, onError: tooLarge })(c, next)
   })
 
-  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw))
+  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(authRequest(c)))
   app.get("/.well-known/*", (c) => auth.handler(c.req.raw))
   const mcp = createMcpEndpoint({ config, auth, blobs, sites })
   app.all("/mcp", (c) => mcp(c.req.raw))
@@ -154,9 +163,12 @@ export async function createServer(config: Config) {
   return {
     sites,
     cleanup,
-    fetch(request: Request) {
+    fetch(request: Request, socketIp?: string) {
       const host = request.headers.get("host")
-      return host === config.previewHost ? preview.fetch(request) : app.fetch(request)
+      const env: RequestEnv = {
+        clientIp: resolveClientIp(request.headers, config.CLIENT_IP_HEADER, socketIp),
+      }
+      return host === config.previewHost ? preview.fetch(request, env) : app.fetch(request, env)
     },
     close: () => sqlite.close(),
   }

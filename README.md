@@ -22,7 +22,8 @@ One container serves two hosts:
 | `PREVIEW_URL` | `https://preview.example.com` | Uploaded sites: `/u/<id>/` and `/<alias>/` |
 
 Uploaded HTML runs JavaScript. Because it is served from a different host, it cannot use your
-dashboard session. Data lives in one volume at `/data`:
+dashboard session. All sites share the preview host, so a page can read any other site you can
+open there, including private ones while you are logged in. Only publish HTML you trust. Data lives in one volume at `/data`:
 
 ```text
 /data/zup.db        SQLite: account, sessions, OAuth clients, deployments, aliases
@@ -168,7 +169,7 @@ redirects into it. For best results build with relative paths (Vite: `base: "./"
 | `MAX_DEPLOYMENT_BYTES` | 4 GiB | Per upload |
 | `MAX_FILES` | 10000 | Per upload |
 | `MCP_MAX_BODY_BYTES` | 64 MiB | Per MCP request |
-| `CLIENT_IP_HEADER` | `x-forwarded-for` | Client IP for rate limits |
+| `CLIENT_IP_HEADER` | `x-forwarded-for` | Client IP for rate limits. The proxy must set or overwrite it. Empty: use the socket address |
 
 ## Development
 

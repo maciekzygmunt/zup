@@ -10,6 +10,7 @@ import { bearer, deviceAuthorization, jwt } from "better-auth/plugins"
 import type { Config } from "./config.ts"
 
 export const cliClientId = "zup-cli"
+export const clientIpHeader = "x-zup-client-ip"
 export const mcpScopes = ["openid", "profile", "email", "offline_access"]
 
 export type Auth = ReturnType<typeof createAuth>
@@ -59,10 +60,13 @@ export function createAuth(config: Config, sqlite: Database) {
         "/sign-in/*": { window: 60, max: 5 },
         "/sign-up/*": { window: 60, max: 3 },
         "/device/*": { window: 60, max: 30 },
+        // Open to anyone (MCP clients register before login): keep it slow.
+        "/oauth2/register": { window: 60, max: 3 },
       },
     },
     advanced: {
-      ipAddress: { ipAddressHeaders: [config.CLIENT_IP_HEADER] },
+      // Set by the server from the resolved client IP (see clientIp.ts), never by the client.
+      ipAddress: { ipAddressHeaders: [clientIpHeader] },
       useSecureCookies: config.appOrigin.startsWith("https:"),
     },
     hooks: { before: nativeLoopbackClients },

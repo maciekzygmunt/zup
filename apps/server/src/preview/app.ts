@@ -6,6 +6,7 @@ import { bodyLimit } from "hono/body-limit"
 import { getCookie, getSignedCookie, setCookie, setSignedCookie } from "hono/cookie"
 import MarkdownIt from "markdown-it"
 import type { BlobStore } from "../blobs.ts"
+import type { RequestEnv } from "../clientIp.ts"
 import type { Config } from "../config.ts"
 import type { Db } from "../db/client.ts"
 import {
@@ -54,7 +55,7 @@ type Deps = { config: Config; db: Db; blobs: BlobStore; owners: OwnerSessions }
 //   /u/<deploymentId>/...  one immutable deployment
 //   /<alias>/...           whatever deployment the alias points to
 export function createPreviewApp({ config, db, blobs, owners }: Deps) {
-  const app = new Hono()
+  const app = new Hono<{ Bindings: RequestEnv }>()
   // Only the unlock form takes a body here.
   app.use(
     "*",
@@ -67,8 +68,7 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
   const unlockPerIp = createRateLimiter(10, 60_000)
   const unlockPerSite = createRateLimiter(60, 60_000)
 
-  const clientIp = (c: Context) =>
-    c.req.header(config.CLIENT_IP_HEADER)?.split(",")[0]?.trim() || "unknown"
+  const clientIp = (c: Context<{ Bindings: RequestEnv }>) => c.env.clientIp ?? "unknown"
 
   const wantsHtml = (c: Context) =>
     c.req.header("sec-fetch-dest") === "document" ||
