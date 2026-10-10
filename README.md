@@ -108,9 +108,13 @@ Then open `APP_URL` and create your account. Sign-up closes after that.
 
 ### Coolify
 
-Create a resource from this repo with the **Dockerfile** (or **Docker Compose**) build pack. Set
-domains to `https://zup.example.com,https://preview.example.com`, port `3000`, add a volume at
-`/data`, and set the three variables above. Coolify's proxy handles TLS and `X-Forwarded-For`.
+Create a **Docker Image** resource with `ghcr.io/maciekzygmunt/zup:latest`. Set domains to
+`https://zup.example.com,https://preview.example.com`, port `3000`, add a volume at `/data`, and
+set the three variables above. Coolify's proxy handles TLS and `X-Forwarded-For`. Redeploy to
+update.
+
+To build from source, create the resource from this repo (or your fork) with the **Dockerfile**
+or **Docker Compose** build pack and the same settings.
 
 ### Configuration
 
