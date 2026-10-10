@@ -48,12 +48,11 @@ const steps = [
 ]
 
 const docker = [
-  "$ git clone https://github.com/maciekzygmunt/zup && cd zup",
-  "$ docker build -t zup .",
   "$ docker run -d -p 3000:3000 -v zup-data:/data \\",
   "    -e APP_URL=https://zup.example.com \\",
   "    -e PREVIEW_URL=https://preview.example.com \\",
-  "    -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) zup",
+  "    -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \\",
+  "    ghcr.io/maciekzygmunt/zup",
 ]
 
 const features = [
@@ -110,7 +109,7 @@ const access = [
 const faq = [
   {
     q: "What do I need to run it?",
-    a: "A host that runs one Docker container, two domains pointed at it and a volume for /data. Coolify, Docker Compose or plain docker run all work.",
+    a: "A host that runs one Docker container, two domains pointed at it and a volume for /data. Run the published image ghcr.io/maciekzygmunt/zup with Coolify, Docker Compose or plain docker run, on amd64 or arm64.",
   },
   {
     q: "Why two domains?",
@@ -158,7 +157,7 @@ const faq = [
       the dashboard or Claude. Share them private, public or with a password.
     </p>
     <div class="mt-8 flex flex-wrap items-center gap-6">
-      <a href={`${repo}#readme`} class="btn-primary">Deploy your own</a>
+      <a href={`${repo}#deploy`} class="btn-primary">Deploy your own</a>
       <a href={repo} class="link-quiet text-base">Read the source</a>
     </div>
     <ul class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted" aria-label="Facts">
@@ -300,7 +299,7 @@ const faq = [
       </div>
       <Code class="reveal mt-8" lines={docker} />
       <div class="reveal mt-8 flex flex-wrap items-center gap-6">
-        <a href={`${repo}#readme`} class="btn-primary">Deploy your own</a>
+        <a href={`${repo}#deploy`} class="btn-primary">Deploy your own</a>
         <a href={repo} class="link-quiet text-base">Star on GitHub</a>
       </div>
     </div>
