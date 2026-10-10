@@ -13,7 +13,20 @@ import {
   type putAliasSchema,
   type UpdateDeploymentInput,
 } from "@zup/shared"
-import { and, count, desc, eq, exists, inArray, like, lt, or, sql } from "drizzle-orm"
+import {
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNull,
+  like,
+  lt,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm"
 import type { z } from "zod"
 import type { BlobStore } from "./blobs.ts"
 import type { Config } from "./config.ts"
@@ -27,6 +40,9 @@ export type SiteService = ReturnType<typeof createSiteService>
 export type ShareTarget = { deploymentId: string } | { alias: string }
 
 type StoredAccess = { access: AccessType; passwordHash: string | null }
+
+// How long a deployment stays after an alias moves away from it.
+const REPLACED_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 // Deployments (immutable uploads) and aliases (stable names that point at one deployment).
 export function createSiteService({
@@ -174,6 +190,7 @@ export function createSiteService({
         source: input.source,
         createdAt: new Date(),
         expiresAt: futureDate(input.expiresAt),
+        autoExpiry: false,
       }
       db.transaction((tx) => {
         tx.insert(deployments).values(row).run()
@@ -252,6 +269,7 @@ export function createSiteService({
           title: patch.title === undefined ? undefined : patch.title || null,
           spa: patch.spa,
           expiresAt: patch.expiresAt === undefined ? undefined : futureDate(patch.expiresAt),
+          autoExpiry: patch.expiresAt === undefined ? undefined : false,
           access: access?.access,
           passwordHash: access ? access.passwordHash : undefined,
         })
@@ -293,15 +311,51 @@ export function createSiteService({
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }
-      await db
-        .insert(aliases)
-        .values(row)
-        .onConflictDoUpdate({ target: aliases.name, set: { ...row, createdAt: undefined } })
+      const previousId =
+        existing && existing.deploymentId !== row.deploymentId ? existing.deploymentId : null
+      db.transaction((tx) => {
+        tx.insert(aliases)
+          .values(row)
+          .onConflictDoUpdate({ target: aliases.name, set: { ...row, createdAt: undefined } })
+          .run()
+        if (deployment.autoExpiry) {
+          tx.update(deployments)
+            .set({ expiresAt: null, autoExpiry: false })
+            .where(eq(deployments.id, deployment.id))
+            .run()
+        }
+        // The replaced deployment expires later, unless it has an expiry or another alias.
+        if (previousId) {
+          tx.update(deployments)
+            .set({ expiresAt: new Date(now.getTime() + REPLACED_TTL_MS), autoExpiry: true })
+            .where(
+              and(
+                eq(deployments.id, previousId),
+                isNull(deployments.expiresAt),
+                notExists(
+                  tx
+                    .select({ one: sql`1` })
+                    .from(aliases)
+                    .where(eq(aliases.deploymentId, previousId)),
+                ),
+              ),
+            )
+            .run()
+        }
+      })
+      const previous =
+        previousId &&
+        (await db.query.deployments.findFirst({
+          columns: { id: true, expiresAt: true },
+          where: eq(deployments.id, previousId),
+        }))
       return {
         alias: aliasSummary(row, deployment.title),
         key: "key" in access ? access.key : undefined,
         created: !existing,
-        previousDeploymentId: existing?.deploymentId ?? null,
+        previous: previous
+          ? { id: previous.id, expiresAt: previous.expiresAt?.toISOString() ?? null }
+          : null,
       }
     },
 

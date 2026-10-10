@@ -32,7 +32,8 @@ zup login https://zup.example.com    # approve the code in the dashboard
 zup ./dist                           # private site
 zup report.html --public | --protect | --password 'correct horse battery'
 zup ./dist --alias demo --public     # also at https://preview.example.com/demo/
-zup ./dist --alias demo --update     # move the alias to the new upload (keeps its access)
+zup ./dist --alias demo --update     # move the alias to the new upload (keeps its access;
+                                     # the old upload is deleted after 7 days)
 zup notes.md -e 7d                   # delete after 7 days
 
 zup ls [search]                      # --access public|private|password, --json

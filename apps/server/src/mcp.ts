@@ -251,7 +251,7 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         {
           title: "Set alias",
           description:
-            "Point an alias at a deployment (creates or moves it). Without access, a moved alias keeps its access and password.",
+            "Point an alias at a deployment (creates or moves it). Without access, a moved alias keeps its access and password. The deployment it leaves expires in 7 days unless another alias points to it.",
           inputSchema: z.object({
             name: aliasNameSchema,
             deploymentId: z.string(),

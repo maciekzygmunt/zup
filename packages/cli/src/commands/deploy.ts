@@ -105,6 +105,14 @@ export async function deploy(inputs: string[], flags: DeployFlags) {
   if (alias && !alias.created && !access && alias.alias.access === "password") {
     warn("The alias kept its existing password. Pass --protect or --password to change it.")
   }
+  if (alias?.previous?.expiresAt) {
+    const { id, expiresAt } = alias.previous
+    info(
+      dim(
+        `Previous deployment ${id} will be deleted ${relativeTime(expiresAt)}. \`zup expire ${id} never\` keeps it.`,
+      ),
+    )
+  }
   if (shareUrl) info(dim("\nThe share link is shown only now. `zup share` makes a new one later."))
   if (flags.open) {
     const target = alias?.alias ?? deployment

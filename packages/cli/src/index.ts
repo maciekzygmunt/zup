@@ -52,7 +52,7 @@ ${bold("Publish options")}
       --protect            Anyone with a generated password can open it
       --password <key>     Same, with your own password (8+ characters)
   -a, --alias <name>       Also serve it at <sites-url>/<name>/
-  -u, --update             Move the alias if it already exists
+  -u, --update             Move the alias if it already exists (old deployment expires in 7d)
   -e, --expires <when>     Delete after 30m, 12h, 7d, 2w or at a date
       --entrypoint <file>  File served at the root
       --no-spa             No fallback to the entrypoint for unknown paths

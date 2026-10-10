@@ -122,6 +122,14 @@ export async function alias(
     ["Password", access?.type === "password" && !flags.password ? access.password : null],
     ["Share link", result.key?.shareUrl],
   ])
+  if (result.previous?.expiresAt) {
+    const { id, expiresAt } = result.previous
+    info(
+      dim(
+        `Previous deployment ${id} will be deleted ${relativeTime(expiresAt)}. \`zup expire ${id} never\` keeps it.`,
+      ),
+    )
+  }
 }
 
 export async function unalias(name: string, flags: Common) {

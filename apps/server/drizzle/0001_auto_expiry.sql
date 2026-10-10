@@ -1,0 +1,1 @@
+ALTER TABLE `deployments` ADD `auto_expiry` integer DEFAULT false NOT NULL;
