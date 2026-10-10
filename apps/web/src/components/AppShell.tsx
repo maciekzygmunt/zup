@@ -1,6 +1,7 @@
 import { LogOut, Settings, UserRound } from "lucide-react"
 import type { ReactNode } from "react"
 import { NavLink, Outlet, useNavigate } from "react-router"
+import logo from "../assets/logo.svg"
 import { authClient } from "../lib/auth.ts"
 import { queryClient } from "../lib/queries.ts"
 import { Menu, MenuItem, MenuSeparator } from "./Menu.tsx"
@@ -16,7 +17,7 @@ const links = [
 export function Logo() {
   return (
     <span className="flex items-center gap-2 font-mono text-[13px] font-semibold tracking-wide">
-      <img src="/favicon.svg" alt="" className="size-5" />
+      <img src={logo} alt="" className="size-5" />
       zup
     </span>
   )
