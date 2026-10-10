@@ -1,136 +1,68 @@
-# zup
+<p align="center">
+  <img src="apps/web/src/assets/logo.svg" width="72" alt="zup logo">
+</p>
 
-Self-hosted publishing for static files and sites. Run `zup ./dist` and get a URL.
+<h1 align="center">zup</h1>
 
-- **CLI** — `zup <files or folder>` uploads only new content (content-addressed), prints the URL.
-- **Three access levels** — private (only you), public (anyone with the URL), password (anyone with the password; a share link opens it without typing).
+<p align="center">Self-hosted publishing for static files and sites. Run <code>zup ./dist</code> and get a URL.</p>
+
+- **CLI** — uploads only new content (content-addressed) and prints the URL.
+- **Access** — private (only you), public, or password (with share links that unlock without typing).
 - **Aliases** — stable names like `https://preview.example.com/report/` that you move to a new upload.
 - **Expiry** — `--expires 7d`; expired uploads are deleted.
-- **Dashboard** — list, search, upload by drag and drop, change access, aliases, share links, sessions, passkeys.
+- **Dashboard** — list, search, drag-and-drop upload, access, aliases, share links, sessions, passkeys.
 - **MCP** — Claude Code / Claude Desktop can publish pages for you, with OAuth login.
-- **Pull and source view** — `zup pull` downloads a site; `<site>/_src/` is a file browser for you.
+
+![zup dashboard: list of sites with private, password and public access](apps/landing/public/screens/sites-dark.png)
 
 One owner account (the first one created). Built with Bun, Hono, Better Auth, SQLite and React.
 
-## How it works
-
-One container serves two hosts:
-
-| Host | Example | Serves |
-| --- | --- | --- |
-| `APP_URL` | `https://zup.example.com` | Dashboard, REST API, CLI login, MCP endpoint, `install.sh` |
-| `PREVIEW_URL` | `https://preview.example.com` | Uploaded sites: `/u/<id>/` and `/<alias>/` |
-
-Uploaded HTML runs JavaScript. Because it is served from a different host, it cannot use your
-dashboard session. All sites share the preview host, so a page can read any other site you can
-open there, including private ones while you are logged in. Only publish HTML you trust. Data lives in one volume at `/data`:
-
-```text
-/data/zup.db        SQLite: account, sessions, OAuth clients, deployments, aliases
-/data/blobs/ab/cd/… file contents, named by SHA-256 (shared between uploads)
-```
-
-## Deploy on Coolify
-
-1. **DNS** — point both domains (e.g. `zup.example.com` and `preview.example.com`) to your Coolify server.
-2. **New resource** — *Public/Private Repository* with this repo, build pack **Dockerfile**.
-3. **Domains** — `https://zup.example.com,https://preview.example.com`. Port: `3000`.
-4. **Persistent storage** — add a volume mounted at `/data`.
-5. **Environment variables**:
-
-   ```env
-   APP_URL=https://zup.example.com
-   PREVIEW_URL=https://preview.example.com
-   BETTER_AUTH_SECRET=<output of: openssl rand -hex 32>
-   ```
-
-6. **Deploy**, then open `https://zup.example.com` and create your account. Sign-up closes after that.
-
-You can also use the **Docker Compose** build pack with `docker-compose.yml`, or run it anywhere:
-
-```sh
-docker build -t zup .
-docker run -d -p 3000:3000 -v zup-data:/data \
-  -e APP_URL=https://zup.example.com -e PREVIEW_URL=https://preview.example.com \
-  -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) zup
-```
-
-Keep `BETTER_AUTH_SECRET` stable: changing it logs everyone out, ends share links and unlock
-cookies of password sites, and invalidates MCP signing keys.
-The container runs as user `bun` (uid 1000); a bind mount for `/data` must be writable by it.
-
-### Backups
-
-Back up the `/data` volume. For a consistent copy while the server runs, copy the database with
-`sqlite3 /data/zup.db ".backup /backup/zup.db"` and then copy `/data/blobs`.
-
 ## CLI
 
-Install it from your server (needs Node.js 20+):
+Install it from your server (needs Node.js 20+) and log in:
 
 ```sh
 curl -fsSL https://zup.example.com/install.sh | sh
-zup login https://zup.example.com
+zup login https://zup.example.com    # approve the code in the dashboard
 ```
-
-`zup login` opens the dashboard and asks you to approve a code (OAuth device flow). The token is
-saved in `~/.config/zup/config.json`. Logins show up under *Settings → Sessions*, where you can revoke them.
-`zup upgrade` installs the latest CLI from your server.
 
 ```sh
-zup ./dist                          # private site
-zup report.html --public            # anyone with the URL
-zup report.html --protect           # generated password, printed once with a share link
-zup report.html --password 'correct horse battery'
-zup ./dist --alias demo --public    # also at https://preview.example.com/demo/
-zup ./dist --alias demo --update    # move the alias to the new upload (keeps its access/password)
-zup notes.md -e 7d                  # delete after 7 days
-zup photo.png                       # any file works; one file is served at its own name
+zup ./dist                           # private site
+zup report.html --public | --protect | --password 'correct horse battery'
+zup ./dist --alias demo --public     # also at https://preview.example.com/demo/
+zup ./dist --alias demo --update     # move the alias to the new upload (keeps its access)
+zup notes.md -e 7d                   # delete after 7 days
 
-zup ls [search]                     # list (--access public|private|password, --json)
-zup info demo                       # details and files
-zup open demo
-zup share demo                      # new share link for a password-protected site
-zup access demo --private           # --public, --protect, --password <key>
-zup alias <id> demo                 # point an alias at an existing upload
-zup unalias demo
-zup expire demo never               # or 30m, 12h, 7d, 2w, a date
-zup rename <id> "Q3 report"
-zup rm <id> demo                    # deletes the deployment (and its aliases) and the alias
-zup pull demo ./copy                # download files, verified by SHA-256
+zup ls [search]                      # --access public|private|password, --json
+zup info | open | share <site>       # share: new share link for a password site
+zup access <site> --private          # or --public, --protect, --password <key>
+zup alias <site> demo                # zup unalias demo to remove
+zup expire <site> never              # or 30m, 12h, 7d, 2w, a date
+zup rename <site> "Q3 report"
+zup rm <site>...
+zup pull demo ./copy                 # download files, verified by SHA-256
+zup upgrade                          # latest CLI from your server
 ```
 
-`<site>` is a deployment id, an alias, or a site URL. Run `zup --help` for every option.
+`<site>` is a deployment id, an alias, or a site URL. `--protect` generates a password and prints
+it once with a share link. Run `zup --help` for every option.
 
-What gets uploaded from a folder:
-
-- `.git`, `node_modules`, `.env*` (except `.env.example`), `.npmrc`, `.DS_Store` are always skipped.
-- `.gitignore` rules apply, unless the folder itself is ignored (a gitignored `dist/` uploads normally).
-- Add a `.zupignore` (gitignore syntax) for more.
-- `index.html` (or `index.md`) is the root. A single page or a single file is the root too.
-  Without one, the root shows a file listing.
-- Unknown paths without an extension serve the root page (single-page apps). Turn off with `--no-spa`.
+Uploading a folder skips `.git`, `node_modules`, `.env*` (except `.env.example`), `.npmrc`,
+`.DS_Store`, `.gitignore` matches and `.zupignore` matches. `index.html` (or `index.md`, or the
+only file) is the root. Unknown extensionless paths serve the root page (SPAs); turn off with `--no-spa`.
 
 Environment: `ZUP_SERVER`, `ZUP_TOKEN` (for CI), `ZUP_PASSWORD` (used by `--protect`).
 
 ## Access
 
-| Access | Who can open it | Set with |
-| --- | --- | --- |
-| private | Only you (logged in) | default, `--private` |
-| public | Anyone with the URL | `--public` |
-| password | Anyone with the password | `--protect`, `--password <key>` |
+A deployment and each alias have their own access: private (default), public, or password.
 
-A deployment and each alias have their own access. `zup ./dist --public --alias demo` sets both.
+**Password sites** remember a correct password for 30 days. Share links (`…/#password=…` or
+`…/#token=…`) unlock without typing; the part after `#` never reaches the server. Only a hash is
+stored, so a lost password cannot be shown again — `zup share` makes a new working link. Setting a
+new password ends all old links and cookies.
 
-**Password sites.** Visitors get a password form. A correct password is remembered for 30 days
-(a cookie for that one site). Share links (`…/#password=…` or `…/#token=…`) unlock without typing; the
-part after `#` never reaches the server or its logs. Only a hash of the password is stored, so a
-lost password cannot be shown again — `zup share` (or *Copy share link* in the dashboard) makes a
-working link at any time. Setting a new password ends all old links and cookies.
-
-**Private sites.** When you open one, zup logs the preview host in through your dashboard session.
-Logging out of the dashboard (or revoking the session) ends that access too.
+**Private sites** use your dashboard session. Logging out (or revoking the session) ends access.
 
 ## MCP (Claude Code, Claude Desktop)
 
@@ -138,26 +70,45 @@ Logging out of the dashboard (or revoking the session) ends that access too.
 claude mcp add --transport http zup https://zup.example.com/mcp
 ```
 
-Then run `/mcp` in Claude Code to log in. In Claude Desktop add a custom connector with the same URL.
-You approve each client once on a consent page. Tools: `deploy_site`, `list_sites`, `get_site`,
-`read_site_file`, `update_site`, `delete_site`, `list_aliases`, `set_alias`, `delete_alias`,
-`get_share_link`. Passwords for password access are always generated by the server.
+Then run `/mcp` in Claude Code to log in. In Claude Desktop, add a custom connector with the same
+URL. Passwords for password access are always generated by the server.
 
-## Sites built for `/`
+## Deploy
 
-Sites live under a path (`/u/<id>/` or `/<alias>/`). Build tools that emit root-relative URLs
-(`/assets/app.js`) still work: zup sees which site the request came from (the `Referer`) and
-redirects into it. For best results build with relative paths (Vite: `base: "./"`).
+zup is one Docker container that serves two hosts:
 
-## Security notes
+| Variable | Example | Serves |
+| --- | --- | --- |
+| `APP_URL` | `https://zup.example.com` | Dashboard, API, CLI login, MCP, `install.sh` |
+| `PREVIEW_URL` | `https://preview.example.com` | Uploaded sites: `/u/<id>/` and `/<alias>/` |
 
-- One owner. Sign-up is closed once the account exists. Passkeys are supported.
-- Dashboard writes need same-origin requests (CSRF check); the CLI uses bearer tokens.
-- All sites share the preview host. A page you upload can read other sites that the *same
-  visitor* can open (for you: all of them). Upload third-party HTML with that in mind.
-- Login, unlock and sign-up endpoints are rate limited.
+You need:
 
-## Configuration
+1. DNS for both hosts pointing to your server.
+2. A reverse proxy with TLS (Caddy, Traefik, nginx) that sends both hosts to the container on port `3000`.
+3. A persistent volume at `/data`.
+
+```sh
+docker build -t zup .
+docker run -d --restart unless-stopped -p 127.0.0.1:3000:3000 -v zup-data:/data \
+  -e APP_URL=https://zup.example.com -e PREVIEW_URL=https://preview.example.com \
+  -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) zup
+```
+
+Then open `APP_URL` and create your account. Sign-up closes after that.
+
+- Keep `BETTER_AUTH_SECRET` stable. Changing it logs everyone out and ends share links and MCP logins.
+- The proxy must set `X-Forwarded-For` (used for rate limits). Without a proxy, set `CLIENT_IP_HEADER=`.
+- The container runs as uid 1000; a bind mount for `/data` must be writable by it.
+- Backups: `sqlite3 /data/zup.db ".backup /backup/zup.db"`, then copy `/data/blobs`.
+
+### Coolify
+
+Create a resource from this repo with the **Dockerfile** (or **Docker Compose**) build pack. Set
+domains to `https://zup.example.com,https://preview.example.com`, port `3000`, add a volume at
+`/data`, and set the three variables above. Coolify's proxy handles TLS and `X-Forwarded-For`.
+
+### Configuration
 
 | Variable | Default | |
 | --- | --- | --- |
@@ -169,7 +120,15 @@ redirects into it. For best results build with relative paths (Vite: `base: "./"
 | `MAX_DEPLOYMENT_BYTES` | 4 GiB | Per upload |
 | `MAX_FILES` | 10000 | Per upload |
 | `MCP_MAX_BODY_BYTES` | 64 MiB | Per MCP request |
-| `CLIENT_IP_HEADER` | `x-forwarded-for` | Client IP for rate limits. The proxy must set or overwrite it. Empty: use the socket address |
+| `CLIENT_IP_HEADER` | `x-forwarded-for` | Client IP header for rate limits. Empty: socket address |
+
+## Notes
+
+- **Security.** Uploaded HTML runs JavaScript on the preview host. It cannot use your dashboard
+  session, but all sites share that host, so a page can read any other site the same visitor can
+  open (for you: all of them). Only publish HTML you trust.
+- **Sites built for `/`.** Root-relative URLs (`/assets/app.js`) still work: zup uses the
+  `Referer` to redirect into the right site. Relative paths are better (Vite: `base: "./"`).
 
 ## Development
 
@@ -182,8 +141,7 @@ bun packages/cli/src/index.ts --help           # CLI from source
 ```
 
 Checks: `bun run typecheck`, `bun run lint`, `bun test`. Schema changes: edit
-`apps/server/src/db/schema.ts`, then `bun run --filter @zup/server db:generate`
-(Better Auth tables migrate themselves at startup).
+`apps/server/src/db/schema.ts`, then `bun run --filter @zup/server db:generate`.
 
 ## License
 
