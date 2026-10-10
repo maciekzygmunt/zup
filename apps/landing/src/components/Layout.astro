@@ -1,13 +1,13 @@
 ---
 // Shared head, island nav and footer. Also runs the scroll reveal observers.
 import "../styles/global.css"
+import { repo } from "../lib/site.ts"
 
 interface Props {
   title: string
   description: string
 }
 const { title, description } = Astro.props
-import { repo } from "../lib/site.ts"
 const path = Astro.url.pathname
 ---
 
@@ -15,7 +15,7 @@ const path = Astro.url.pathname
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="dark" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -35,9 +35,9 @@ const path = Astro.url.pathname
       Skip to content
     </a>
 
-    <header class="sticky top-0 z-30 px-4">
+    <header class="pointer-events-none sticky top-0 z-30 px-4 pt-6">
       <div
-        class="mx-auto mt-6 flex w-max max-w-full items-center gap-1 rounded-full border border-line bg-bg/70 p-1 shadow-sm backdrop-blur-xl"
+        class="pointer-events-auto mx-auto flex w-max max-w-full items-center gap-1 rounded-full border border-line bg-bg/70 p-1 shadow-sm backdrop-blur-xl"
       >
         <a
           href="/"
@@ -52,7 +52,7 @@ const path = Astro.url.pathname
           <a href="/#faq" class="link-quiet rounded-full px-3 py-1">FAQ</a>
           <a
             href={repo}
-            class="rounded-full bg-fg px-3 py-1 text-bg transition-all duration-700 ease-fluid hover:opacity-85 active:scale-[0.98]"
+            class="rounded-full bg-fg px-3 py-1.5 text-bg transition-all duration-700 ease-fluid hover:opacity-85 active:scale-[0.98]"
           >
             GitHub
           </a>

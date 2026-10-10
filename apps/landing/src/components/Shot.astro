@@ -1,5 +1,5 @@
 ---
-// Dashboard screenshot that follows the visitor's color scheme.
+// Dashboard screenshot (dark, like the page).
 interface Props {
   name: string
   alt: string
@@ -10,10 +10,8 @@ const { name, alt, width, height } = Astro.props
 ---
 
 <figure class="overflow-hidden rounded-xl border border-line bg-card shadow-sm">
-  <picture>
-    <source srcset={`/screens/${name}-dark.png`} media="(prefers-color-scheme: dark)" />
-    <img
-      src={`/screens/${name}-light.png`}
+  <img
+      src={`/screens/${name}-dark.png`}
       alt={alt}
       width={width}
       height={height}
@@ -21,5 +19,4 @@ const { name, alt, width, height } = Astro.props
       decoding="async"
       class="block w-full"
     />
-  </picture>
 </figure>
