@@ -63,7 +63,7 @@ export function CrawlIcon({ className }: { className?: string }) {
       <Tooltip.Portal>
         <Tooltip.Positioner className="z-50" sideOffset={6}>
           <Tooltip.Popup className="max-w-56 rounded-md bg-fg px-2 py-1 text-xs text-bg shadow-md transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0">
-            Crawlable: Google, Bing and link previews can index it.
+            Crawlable by search engines
           </Tooltip.Popup>
         </Tooltip.Positioner>
       </Tooltip.Portal>
