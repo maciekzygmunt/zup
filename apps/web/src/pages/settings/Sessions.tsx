@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Monitor, TerminalSquare } from "lucide-react"
 import { toast } from "sonner"
 import { Button, Card, ErrorNote, Spinner } from "../../components/ui.tsx"
+import { api, parseResponse } from "../../lib/api.ts"
 import { authClient, unwrap } from "../../lib/auth.ts"
 import { describeAgent, fullDate, timeAgo } from "../../lib/format.ts"
 import { Section } from "../SettingsPage.tsx"
@@ -10,14 +11,13 @@ const sessionsKey = ["sessions"]
 
 export function Sessions() {
   const queryClient = useQueryClient()
-  const current = authClient.useSession().data?.session
   const list = useQuery({
     queryKey: sessionsKey,
-    queryFn: () => unwrap(authClient.listSessions()),
+    queryFn: async () => (await parseResponse(api.sessions.$get())).sessions,
   })
   const refresh = () => queryClient.invalidateQueries({ queryKey: sessionsKey })
   const revoke = useMutation({
-    mutationFn: (token: string) => unwrap(authClient.revokeSession({ token })),
+    mutationFn: (id: string) => parseResponse(api.sessions[":id"].$delete({ param: { id } })),
     onSuccess: () => {
       toast.success("Session signed out")
       refresh()
@@ -34,7 +34,7 @@ export function Sessions() {
   })
   const sessions = [...(list.data ?? [])].sort(
     (a, b) =>
-      Number(b.id === current?.id) - Number(a.id === current?.id) ||
+      Number(b.current) - Number(a.current) ||
       new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   )
 
@@ -56,14 +56,13 @@ export function Sessions() {
         {sessions.map((session) => {
           const agent = describeAgent(session.userAgent)
           const Icon = agent === "zup CLI" ? TerminalSquare : Monitor
-          const isCurrent = session.id === current?.id
           return (
             <div key={session.id} className="flex items-center gap-3 px-4 py-2.5">
               <Icon className="size-4 shrink-0 text-muted" aria-hidden />
               <div className="grid min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-[13px] font-medium">
                   {agent}
-                  {isCurrent && (
+                  {session.current && (
                     <span className="rounded-full bg-ok/10 px-1.5 text-[11px] font-medium text-ok">
                       This browser
                     </span>
@@ -80,12 +79,12 @@ export function Sessions() {
                   </span>
                 </span>
               </div>
-              {!isCurrent && (
+              {!session.current && (
                 <Button
                   size="sm"
                   variant="ghost"
-                  pending={revoke.isPending && revoke.variables === session.token}
-                  onClick={() => revoke.mutate(session.token)}
+                  pending={revoke.isPending && revoke.variables === session.id}
+                  onClick={() => revoke.mutate(session.id)}
                 >
                   Sign out
                 </Button>

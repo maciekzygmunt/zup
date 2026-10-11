@@ -51,8 +51,6 @@ export function createAuth(config: Config, sqlite: Database) {
       // CLI tokens are sessions too; using them keeps them alive.
       expiresIn: 60 * 60 * 24 * 60,
       updateAge: 60 * 60 * 24,
-      // Off: listing your own sessions should not need a recent sign-in.
-      freshAge: 0,
     },
     rateLimit: {
       enabled: true,
