@@ -52,16 +52,19 @@ const nameParam = z.object({ name: aliasNameSchema })
 
 export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps) {
   // Every route below needs the owner's session: a dashboard cookie or a CLI bearer token.
-  const requireOwner = createMiddleware(async (c, next) => {
-    const session = await auth.api.getSession({ headers: c.req.raw.headers })
-    if (!session) return c.json({ error: "unauthorized", message: "Log in first" }, 401)
-    // Cookie-authenticated writes must come from the dashboard itself (CSRF).
-    const usesCookie = !c.req.header("authorization")
-    if (usesCookie && c.req.method !== "GET" && c.req.header("origin") !== config.appOrigin) {
-      return c.json({ error: "forbidden", message: "Cross-origin request" }, 403)
-    }
-    await next()
-  })
+  const requireOwner = createMiddleware<{ Variables: { session: Auth["$Infer"]["Session"] } }>(
+    async (c, next) => {
+      const session = await auth.api.getSession({ headers: c.req.raw.headers })
+      if (!session) return c.json({ error: "unauthorized", message: "Log in first" }, 401)
+      // Cookie-authenticated writes must come from the dashboard itself (CSRF).
+      const usesCookie = !c.req.header("authorization")
+      if (usesCookie && c.req.method !== "GET" && c.req.header("origin") !== config.appOrigin) {
+        return c.json({ error: "forbidden", message: "Cross-origin request" }, 403)
+      }
+      c.set("session", session)
+      await next()
+    },
+  )
 
   const info: ServerInfo = {
     appUrl: config.appOrigin,
@@ -188,6 +191,34 @@ export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps
       .post("/share-links", validate("json", shareLinkSchema), async (c) =>
         c.json(await sites.shareLink(c.req.valid("json"))),
       )
+
+      // Better Auth's /list-sessions returns raw tokens, which are login credentials.
+      // These routes expose only metadata and revoke by id.
+      .get("/sessions", async (c) => {
+        const { session, user } = c.get("session")
+        const { internalAdapter } = await auth.$context
+        const sessions = await internalAdapter.listSessions(user.id, { onlyActiveSessions: true })
+        return c.json({
+          sessions: sessions.map(({ id, userAgent, ipAddress, createdAt, updatedAt }) => ({
+            id,
+            userAgent,
+            ipAddress,
+            createdAt,
+            updatedAt,
+            current: id === session.id,
+          })),
+        })
+      })
+
+      .delete("/sessions/:id", async (c) => {
+        const { user } = c.get("session")
+        const { internalAdapter } = await auth.$context
+        const sessions = await internalAdapter.listSessions(user.id)
+        const target = sessions.find((s) => s.id === c.req.param("id"))
+        if (!target) throw new HttpError(404, "session_not_found", "No such session")
+        await internalAdapter.deleteSession(target.token)
+        return c.body(null, 204)
+      })
   )
 }
 
