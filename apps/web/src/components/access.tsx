@@ -96,7 +96,7 @@ export function AccessPicker({
                 "flex cursor-pointer flex-col items-start gap-1 rounded-lg border px-3 py-2 transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent",
                 checked
                   ? "border-accent bg-accent/5 ring-1 ring-accent"
-                  : "border-line hover:bg-subtle",
+                  : "border-line hover:border-muted/50 hover:bg-hover",
               )}
             >
               <input

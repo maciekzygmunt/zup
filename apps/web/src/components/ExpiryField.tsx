@@ -20,7 +20,12 @@ export function ExpiryField({
         onValueChange={(preset) => preset && onChange({ ...value, preset })}
       >
         <Select.Label className="text-[13px] font-medium">Expires</Select.Label>
-        <Select.Trigger className={cx(inputClass, "flex items-center justify-between text-left")}>
+        <Select.Trigger
+          className={cx(
+            inputClass,
+            "flex items-center justify-between text-left transition-colors hover:border-muted/50",
+          )}
+        >
           <Select.Value />
           <Select.Icon>
             <ChevronsUpDown className="size-3.5 text-muted" />
@@ -34,7 +39,7 @@ export function ExpiryField({
                   <Select.Item
                     key={item.value}
                     value={item.value}
-                    className="grid cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-md py-1.5 pr-3 pl-2 text-sm outline-none select-none data-highlighted:bg-subtle"
+                    className="grid grid-cols-[1rem_1fr] items-center gap-2 rounded-md py-1.5 pr-3 pl-2 text-sm outline-none select-none data-highlighted:bg-hover"
                   >
                     <Select.ItemIndicator>
                       <Check className="size-3.5" />

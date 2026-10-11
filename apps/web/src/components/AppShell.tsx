@@ -61,7 +61,7 @@ export function AppShell() {
                 trigger={
                   <button
                     type="button"
-                    className="flex size-8 items-center justify-center rounded-full border border-line bg-card text-[12px] font-semibold uppercase hover:bg-subtle"
+                    className="flex size-8 items-center justify-center rounded-full border border-line bg-card text-[12px] font-semibold uppercase transition-colors hover:border-muted/50 hover:bg-subtle"
                     aria-label="Account"
                   >
                     {data?.user.name.slice(0, 1) || <UserRound className="size-4" />}

@@ -217,7 +217,7 @@ function SpaToggle({ deployment }: { deployment: DeploymentDetail }) {
         checked={checked}
         disabled={mutation.isPending}
         onCheckedChange={(spa) => mutation.mutate(spa)}
-        className="mt-0.5 flex h-5 w-9 shrink-0 rounded-full bg-line p-0.5 transition-colors data-checked:bg-accent data-disabled:opacity-60"
+        className="mt-0.5 flex h-5 w-9 shrink-0 rounded-full bg-line p-0.5 transition-colors hover:bg-muted/50 data-checked:bg-accent data-checked:hover:bg-accent/80 data-disabled:opacity-60"
       >
         <Switch.Thumb className="size-4 rounded-full bg-white shadow-sm transition-transform data-checked:translate-x-4" />
       </Switch.Root>
