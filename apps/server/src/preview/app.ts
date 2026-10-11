@@ -402,16 +402,28 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     return c.redirect(target, 303)
   }
 
-  // Blocks everything except public aliases marked indexable. Crawlers use the most specific rule.
+  // Blocks everything except public aliases marked indexable. Crawlers use the most specific
+  // rule. `/<name>$` lets them follow the redirect to `/<name>/`.
   app.get("/robots.txt", async (c) => {
     const open = await db
-      .select({ name: aliases.name })
+      .select({ name: aliases.name, sitemap: deploymentFiles.path })
       .from(aliases)
+      .leftJoin(
+        deploymentFiles,
+        and(
+          eq(deploymentFiles.deploymentId, aliases.deploymentId),
+          eq(deploymentFiles.path, "/sitemap.xml"),
+        ),
+      )
       .where(and(eq(aliases.indexable, true), eq(aliases.access, "public")))
       .orderBy(aliases.name)
-    const allow = open.map(({ name }) => `Allow: /${name}/\n`).join("")
+    const allow = open.map(({ name }) => `Allow: /${name}$\nAllow: /${name}/\n`).join("")
+    const sitemaps = open
+      .filter(({ sitemap }) => sitemap)
+      .map(({ name }) => `Sitemap: ${config.previewOrigin}/${name}/sitemap.xml\n`)
+      .join("")
     c.header("Cache-Control", "public, max-age=300")
-    return c.text(`User-agent: *\n${allow}Disallow: /\n`)
+    return c.text(`User-agent: *\n${allow}Disallow: /\n${sitemaps && `\n${sitemaps}`}`)
   })
 
   app.get("/", (c) =>

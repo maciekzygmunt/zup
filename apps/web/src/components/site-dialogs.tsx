@@ -66,7 +66,7 @@ function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) 
           : await parseResponse(
               api.aliases[":name"].$patch({
                 param: { name: target.name },
-                // Leaving public turns indexing off, so a later switch back does not expose it.
+                // The server allows indexing only on public aliases.
                 json: { access, indexable: draft.type === "public" && indexable },
               }),
             )

@@ -29,3 +29,11 @@ export function accessFromFlags(flags: AccessFlags): AccessInput | undefined {
   }
   return undefined
 }
+
+export type IndexFlags = { index?: boolean; "no-index"?: boolean }
+
+// Turns --index / --no-index into whether search engines may crawl an alias. Undefined keeps it.
+export function indexableFromFlags(flags: IndexFlags) {
+  if (flags.index && flags["no-index"]) throw new CliError("Use only one of --index, --no-index")
+  return flags.index ? true : flags["no-index"] ? false : undefined
+}

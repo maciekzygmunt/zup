@@ -192,20 +192,23 @@ describe("access", () => {
 
 describe("robots.txt", () => {
   const robots = async () => (await get("/robots.txt")).text()
+  const blockAll = "User-agent: *\nDisallow: /\n"
 
   test("blocks everything when no alias is indexable", async () => {
-    expect(await robots()).toBe("User-agent: *\nDisallow: /\n")
+    expect(await robots()).toBe(blockAll)
   })
 
-  test("allows public indexable aliases and keeps the setting when moved", async () => {
+  test("allows public indexable aliases, lists their sitemaps and keeps the setting on a move", async () => {
     const first = await publish({ "/index.html": "v1" })
-    const second = await publish({ "/index.html": "v2" })
+    const second = await publish({ "/index.html": "v2", "/sitemap.xml": "<urlset/>" })
     await server.sites.putAlias("landing", {
       deploymentId: first.deployment.id,
       access: { type: "public" },
       indexable: true,
       mode: "create",
     })
+    expect(await robots()).toBe("User-agent: *\nAllow: /landing$\nAllow: /landing/\nDisallow: /\n")
+
     const moved = await server.sites.putAlias("landing", {
       deploymentId: second.deployment.id,
       mode: "upsert",
@@ -213,20 +216,24 @@ describe("robots.txt", () => {
     expect(moved.alias.indexable).toBe(true)
     const response = await get("/robots.txt")
     expect(response.headers.get("cache-control")).toBe("public, max-age=300")
-    expect(await response.text()).toBe("User-agent: *\nAllow: /landing/\nDisallow: /\n")
+    expect(await response.text()).toBe(
+      "User-agent: *\nAllow: /landing$\nAllow: /landing/\nDisallow: /\n\n" +
+        "Sitemap: http://127.0.0.1:4100/landing/sitemap.xml\n",
+    )
+    // The page itself carries no noindex header.
+    const page = await get("/landing/")
+    expect(page.status).toBe(200)
+    expect(page.headers.get("x-robots-tag")).toBeNull()
   })
 
-  test("ignores indexable aliases that are not public", async () => {
-    const { deployment } = await publish({ "/index.html": "hidden" })
-    await server.sites.putAlias("hidden", {
-      deploymentId: deployment.id,
-      access: { type: "private" },
-      indexable: true,
-      mode: "create",
-    })
+  test("leaving public access turns indexing off", async () => {
     await server.sites.updateAlias("landing", {
       access: { type: "password", password: "landing key" },
     })
-    expect(await robots()).toBe("User-agent: *\nDisallow: /\n")
+    expect(await robots()).toBe(blockAll)
+    // Switching back to public does not turn it on again.
+    const { alias } = await server.sites.updateAlias("landing", { access: { type: "public" } })
+    expect(alias.indexable).toBe(false)
+    expect(await robots()).toBe(blockAll)
   })
 })

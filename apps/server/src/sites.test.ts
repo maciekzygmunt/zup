@@ -73,3 +73,49 @@ describe("moving an alias", () => {
     expect(await expiryOf(temporary)).toBe(expiresAt)
   })
 })
+
+describe("indexable aliases", () => {
+  const errorOf = (promise: Promise<unknown>) =>
+    promise.then(
+      () => null,
+      (error: { code?: string }) => error.code,
+    )
+
+  test("is off by default and only allowed on public aliases", async () => {
+    const id = await publish()
+    const created = await move("plain", id)
+    expect(created.alias.indexable).toBe(false)
+    expect(created.alias.access).toBe("private")
+    expect(await errorOf(server.sites.updateAlias("plain", { indexable: true }))).toBe("not_public")
+    expect(
+      await errorOf(
+        server.sites.putAlias("hidden", {
+          deploymentId: id,
+          access: { type: "password" },
+          indexable: true,
+          mode: "create",
+        }),
+      ),
+    ).toBe("not_public")
+  })
+
+  test("can change without new access, and keeps the access and password", async () => {
+    const id = await publish()
+    await server.sites.putAlias("open", {
+      deploymentId: id,
+      access: { type: "public" },
+      mode: "create",
+    })
+    const on = await server.sites.updateAlias("open", { indexable: true })
+    expect(on.alias).toMatchObject({ access: "public", indexable: true })
+    expect(on.key).toBeUndefined()
+    const off = await server.sites.updateAlias("open", { indexable: false })
+    expect(off.alias).toMatchObject({ access: "public", indexable: false })
+
+    await server.sites.updateAlias("open", { access: { type: "password", password: "secret key" } })
+    const before = await server.sites.shareLink({ alias: "open" })
+    const kept = await server.sites.updateAlias("open", { indexable: false })
+    expect(kept.alias.access).toBe("password")
+    expect((await server.sites.shareLink({ alias: "open" })).shareUrl).toBe(before.shareUrl)
+  })
+})
