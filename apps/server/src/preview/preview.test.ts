@@ -189,3 +189,44 @@ describe("access", () => {
     expect((await get(`/u/${deployment.id}/`)).status).toBe(404)
   })
 })
+
+describe("robots.txt", () => {
+  const robots = async () => (await get("/robots.txt")).text()
+
+  test("blocks everything when no alias is indexable", async () => {
+    expect(await robots()).toBe("User-agent: *\nDisallow: /\n")
+  })
+
+  test("allows public indexable aliases and keeps the setting when moved", async () => {
+    const first = await publish({ "/index.html": "v1" })
+    const second = await publish({ "/index.html": "v2" })
+    await server.sites.putAlias("landing", {
+      deploymentId: first.deployment.id,
+      access: { type: "public" },
+      indexable: true,
+      mode: "create",
+    })
+    const moved = await server.sites.putAlias("landing", {
+      deploymentId: second.deployment.id,
+      mode: "upsert",
+    })
+    expect(moved.alias.indexable).toBe(true)
+    const response = await get("/robots.txt")
+    expect(response.headers.get("cache-control")).toBe("public, max-age=300")
+    expect(await response.text()).toBe("User-agent: *\nAllow: /landing/\nDisallow: /\n")
+  })
+
+  test("ignores indexable aliases that are not public", async () => {
+    const { deployment } = await publish({ "/index.html": "hidden" })
+    await server.sites.putAlias("hidden", {
+      deploymentId: deployment.id,
+      access: { type: "private" },
+      indexable: true,
+      mode: "create",
+    })
+    await server.sites.updateAlias("landing", {
+      access: { type: "password", password: "landing key" },
+    })
+    expect(await robots()).toBe("User-agent: *\nDisallow: /\n")
+  })
+})

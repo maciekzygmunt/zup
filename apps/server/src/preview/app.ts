@@ -402,7 +402,17 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     return c.redirect(target, 303)
   }
 
-  app.get("/robots.txt", (c) => c.text("User-agent: *\nDisallow: /\n"))
+  // Blocks everything except public aliases marked indexable. Crawlers use the most specific rule.
+  app.get("/robots.txt", async (c) => {
+    const open = await db
+      .select({ name: aliases.name })
+      .from(aliases)
+      .where(and(eq(aliases.indexable, true), eq(aliases.access, "public")))
+      .orderBy(aliases.name)
+    const allow = open.map(({ name }) => `Allow: /${name}/\n`).join("")
+    c.header("Cache-Control", "public, max-age=300")
+    return c.text(`User-agent: *\n${allow}Disallow: /\n`)
+  })
 
   app.get("/", (c) =>
     html(c, messagePage({ status: 200, title: "zup", message: "Nothing to see at the root." })),

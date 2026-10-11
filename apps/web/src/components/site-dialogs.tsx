@@ -32,7 +32,7 @@ type CloseProps = { close: () => void }
 
 export type AccessTarget =
   | { kind: "deployment"; id: string; access: AccessType }
-  | { kind: "alias"; name: string; access: AccessType }
+  | { kind: "alias"; name: string; access: AccessType; indexable: boolean }
 
 export const siteName = (d: Pick<DeploymentSummary, "title" | "id">) => d.title || d.id
 
@@ -53,6 +53,7 @@ export function ChangeAccessDialog({ target, ...props }: OpenProps & { target: A
 function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) {
   const invalidate = useInvalidateSites()
   const [draft, setDraft] = useState(() => accessDraft(target.access))
+  const [indexable, setIndexable] = useState(target.kind === "alias" && target.indexable)
   const [granted, setGranted] = useState<GrantedKey>()
   const mutation = useMutation({
     mutationFn: async () => {
@@ -63,7 +64,11 @@ function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) 
               api.deployments[":id"].$patch({ param: { id: target.id }, json: { access } }),
             )
           : await parseResponse(
-              api.aliases[":name"].$patch({ param: { name: target.name }, json: { access } }),
+              api.aliases[":name"].$patch({
+                param: { name: target.name },
+                // Leaving public turns indexing off, so a later switch back does not expose it.
+                json: { access, indexable: draft.type === "public" && indexable },
+              }),
             )
       return result.key
     },
@@ -120,6 +125,22 @@ function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) 
               : undefined
           }
         />
+        {target.kind === "alias" && draft.type === "public" && (
+          <label className="flex items-start gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={indexable}
+              onChange={(e) => setIndexable(e.target.checked)}
+            />
+            <span>
+              Allow search engines
+              <span className="block text-xs text-muted">
+                Google, Bing and link previews can crawl /{target.name}.
+              </span>
+            </span>
+          </label>
+        )}
         {mutation.error && <ErrorNote>{errorMessage(mutation.error)}</ErrorNote>}
       </DialogBody>
       <DialogFooter>

@@ -180,7 +180,7 @@ export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps
         validate("param", nameParam),
         validate("json", updateAliasSchema),
         async (c) =>
-          c.json(await sites.updateAlias(c.req.valid("param").name, c.req.valid("json").access)),
+          c.json(await sites.updateAlias(c.req.valid("param").name, c.req.valid("json"))),
       )
 
       .delete("/aliases/:name", validate("param", nameParam), async (c) => {
