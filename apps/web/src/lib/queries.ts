@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   QueryCache,
   QueryClient,
   queryOptions,
@@ -65,6 +66,8 @@ export const useDeployments = (q: string, access: AccessType | undefined) =>
           },
         }),
       ),
+    // Keep showing the old results while a new search loads.
+    placeholderData: keepPreviousData,
     initialPageParam: 0,
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((sum, page) => sum + page.deployments.length, 0)

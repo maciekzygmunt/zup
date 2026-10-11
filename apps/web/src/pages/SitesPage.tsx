@@ -80,7 +80,7 @@ export function SitesPage() {
           <h1 className="text-xl font-semibold">Sites</h1>
           <p className="text-[13px] text-muted tabular-nums">
             {total === undefined
-              ? " "
+              ? "\u00a0"
               : filtered
                 ? `${plural(total, "match", "matches")}`
                 : plural(total, "site")}
@@ -126,7 +126,12 @@ export function SitesPage() {
           <EmptyState />
         )
       ) : (
-        <Card className="divide-y divide-line overflow-hidden">
+        <Card
+          className={cx(
+            "divide-y divide-line overflow-hidden transition-opacity",
+            list.isPlaceholderData && "opacity-60",
+          )}
+        >
           {deployments.map((deployment) => (
             <SiteRow key={deployment.id} deployment={deployment} />
           ))}
