@@ -3,7 +3,14 @@ import { accessTypes, formatBytes } from "@zup/shared"
 import { ChevronDown, Clock, FilePlus2, FolderUp, Search, Upload } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router"
-import { AccessBadge, AccessIcon, accessInfo } from "../components/access.tsx"
+import {
+  AccessBadge,
+  AccessIcon,
+  accessInfo,
+  CrawlIcon,
+  CrawlTooltip,
+  isCrawlable,
+} from "../components/access.tsx"
 import { CopyRow } from "../components/copy.tsx"
 import { Menu, MenuItem } from "../components/Menu.tsx"
 import { SiteMenu } from "../components/SiteMenu.tsx"
@@ -220,14 +227,17 @@ function SiteRow({ deployment }: { deployment: DeploymentSummary }) {
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <AccessBadge access={d.access} />
           {d.aliases.map((alias) => (
-            <span
-              key={alias.name}
-              title={alias.url}
-              className="inline-flex h-5 max-w-40 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-[11.5px]"
-            >
-              <AccessIcon access={alias.access} className="shrink-0 text-muted" />
-              <span className="truncate font-mono">/{alias.name}</span>
-            </span>
+            // Above the row link so hovering the chip shows its tooltip.
+            <CrawlTooltip key={alias.name} crawlable={isCrawlable(alias)}>
+              <span
+                title={isCrawlable(alias) ? undefined : alias.url}
+                className="relative z-10 inline-flex h-5 max-w-40 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-[11.5px]"
+              >
+                <AccessIcon access={alias.access} className="shrink-0 text-muted" />
+                <span className="truncate font-mono">/{alias.name}</span>
+                {isCrawlable(alias) && <CrawlIcon />}
+              </span>
+            </CrawlTooltip>
           ))}
         </div>
         <div className="flex gap-3 text-[12.5px] text-muted tabular-nums md:grid md:gap-0">

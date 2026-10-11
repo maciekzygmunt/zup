@@ -31,7 +31,7 @@ type OpenProps = { open: boolean; onOpenChange: (open: boolean) => void }
 type CloseProps = { close: () => void }
 
 export type AccessTarget =
-  | { kind: "deployment"; id: string; access: AccessType }
+  | { kind: "deployment"; id: string; access: AccessType; aliases: AliasSummary[] }
   | { kind: "alias"; name: string; access: AccessType; indexable: boolean }
 
 export const siteName = (d: Pick<DeploymentSummary, "title" | "id">) => d.title || d.id
@@ -54,22 +54,41 @@ function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) 
   const invalidate = useInvalidateSites()
   const [draft, setDraft] = useState(() => accessDraft(target.access))
   const [indexable, setIndexable] = useState(target.kind === "alias" && target.indexable)
+  // Search engine switch per public alias, shown in the deployment dialog.
+  const publicAliases =
+    target.kind === "deployment" ? target.aliases.filter((alias) => alias.access === "public") : []
+  const [crawl, setCrawl] = useState(() =>
+    Object.fromEntries(publicAliases.map((alias) => [alias.name, alias.indexable])),
+  )
   const [granted, setGranted] = useState<GrantedKey>()
   const mutation = useMutation({
     mutationFn: async () => {
       const access = draftToInput(draft)
-      const result =
-        target.kind === "deployment"
-          ? await parseResponse(
-              api.deployments[":id"].$patch({ param: { id: target.id }, json: { access } }),
-            )
-          : await parseResponse(
+      if (target.kind === "alias") {
+        const result = await parseResponse(
+          api.aliases[":name"].$patch({
+            param: { name: target.name },
+            // The server allows indexing only on public aliases.
+            json: { access, indexable: draft.type === "public" && indexable },
+          }),
+        )
+        return result.key
+      }
+      const result = await parseResponse(
+        api.deployments[":id"].$patch({ param: { id: target.id }, json: { access } }),
+      )
+      await Promise.all(
+        publicAliases
+          .filter((alias) => crawl[alias.name] !== alias.indexable)
+          .map((alias) =>
+            parseResponse(
               api.aliases[":name"].$patch({
-                param: { name: target.name },
-                // The server allows indexing only on public aliases.
-                json: { access, indexable: draft.type === "public" && indexable },
+                param: { name: alias.name },
+                json: { indexable: crawl[alias.name] },
               }),
-            )
+            ),
+          ),
+      )
       return result.key
     },
     onSuccess: (key) => {
@@ -126,20 +145,35 @@ function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) 
           }
         />
         {target.kind === "alias" && draft.type === "public" && (
-          <label className="flex items-start gap-2 text-[13px]">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={indexable}
-              onChange={(e) => setIndexable(e.target.checked)}
-            />
-            <span>
-              Allow search engines
-              <span className="block text-xs text-muted">
-                Google, Bing and link previews can crawl /{target.name}.
-              </span>
-            </span>
-          </label>
+          <CrawlCheckbox
+            name={target.name}
+            checked={indexable}
+            onChange={setIndexable}
+            label="Allow search engines"
+          />
+        )}
+        {target.kind === "deployment" && (
+          <div className="grid gap-2 border-t border-line pt-3 text-[13px]">
+            <p className="font-medium">Search engines</p>
+            {publicAliases.length === 0 ? (
+              <p className="text-xs text-muted">
+                Only public aliases can be crawled. The deployment URL stays hidden.{" "}
+                {target.aliases.length === 0
+                  ? "Add an alias to allow it."
+                  : "Make an alias public on the Aliases page to allow it."}
+              </p>
+            ) : (
+              publicAliases.map((alias) => (
+                <CrawlCheckbox
+                  key={alias.name}
+                  name={alias.name}
+                  checked={crawl[alias.name] ?? false}
+                  onChange={(checked) => setCrawl({ ...crawl, [alias.name]: checked })}
+                  label={`Allow search engines on /${alias.name}`}
+                />
+              ))
+            )}
+          </div>
         )}
         {mutation.error && <ErrorNote>{errorMessage(mutation.error)}</ErrorNote>}
       </DialogBody>
@@ -150,6 +184,35 @@ function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) 
         </Button>
       </DialogFooter>
     </form>
+  )
+}
+
+function CrawlCheckbox({
+  name,
+  checked,
+  onChange,
+  label,
+}: {
+  name: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+}) {
+  return (
+    <label className="flex items-start gap-2 text-[13px]">
+      <input
+        type="checkbox"
+        className="mt-0.5"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>
+        {label}
+        <span className="block text-xs text-muted">
+          Google, Bing and link previews can crawl /{name}.
+        </span>
+      </span>
+    </label>
   )
 }
 

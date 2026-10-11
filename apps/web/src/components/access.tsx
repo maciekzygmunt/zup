@@ -1,3 +1,4 @@
+import { Tooltip } from "@base-ui/react/tooltip"
 import {
   type AccessInput,
   type AccessType,
@@ -5,8 +6,8 @@ import {
   accessTypes,
   passwordSchema,
 } from "@zup/shared"
-import { Globe, KeyRound, Lock, Search } from "lucide-react"
-import { useId } from "react"
+import { Bot, Globe, KeyRound, Lock } from "lucide-react"
+import { type ReactElement, useId } from "react"
 import { cx, Field, Input } from "./ui.tsx"
 
 export const accessInfo = {
@@ -36,17 +37,50 @@ export function AccessBadge({ access }: { access: AccessType }) {
   )
 }
 
-// Access badge for an alias, with a search icon when search engines can crawl it.
+// Access badge for an alias, with a robot icon when search engines can crawl it.
 export function AliasAccessBadge({ alias }: { alias: Pick<AliasSummary, "access" | "indexable"> }) {
+  const crawlable = isCrawlable(alias)
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <AccessBadge access={alias.access} />
-      {alias.access === "public" && alias.indexable && (
-        <span title="Search engines can crawl it" className="inline-flex text-muted">
-          <Search className="size-3.5" aria-label="Search engines can crawl it" role="img" />
-        </span>
-      )}
-    </span>
+    <CrawlTooltip crawlable={crawlable}>
+      <span className="inline-flex items-center gap-1.5">
+        <AccessBadge access={alias.access} />
+        {crawlable && <CrawlIcon />}
+      </span>
+    </CrawlTooltip>
+  )
+}
+
+export const isCrawlable = (alias: Pick<AliasSummary, "access" | "indexable">) =>
+  alias.access === "public" && alias.indexable
+
+export const CrawlIcon = ({ className }: { className?: string }) => (
+  <Bot
+    className={cx("size-3.5 shrink-0 text-muted", className)}
+    aria-label="Crawlable"
+    role="img"
+  />
+)
+
+// Shows "Crawlable" on hover over a chip of an alias that search engines can crawl.
+export function CrawlTooltip({
+  crawlable,
+  children,
+}: {
+  crawlable: boolean
+  children: ReactElement
+}) {
+  if (!crawlable) return children
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger delay={150} render={children} />
+      <Tooltip.Portal>
+        <Tooltip.Positioner className="z-50" sideOffset={6}>
+          <Tooltip.Popup className="rounded-md bg-fg px-2 py-1 text-xs text-bg shadow-md transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0">
+            Crawlable
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   )
 }
 
