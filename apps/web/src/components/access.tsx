@@ -1,3 +1,4 @@
+import { Tooltip } from "@base-ui/react/tooltip"
 import {
   type AccessInput,
   type AccessType,
@@ -46,12 +47,27 @@ export function AliasAccessBadge({ alias }: { alias: Pick<AliasSummary, "access"
   )
 }
 
-// Marks an alias that search engines can crawl.
+// Marks an alias that search engines can crawl, with a tooltip on hover or focus.
 export function CrawlIcon({ className }: { className?: string }) {
   return (
-    <span title="Search engines can crawl it" className={cx("inline-flex text-muted", className)}>
-      <Bot className="size-3.5" aria-label="Search engines can crawl it" role="img" />
-    </span>
+    <Tooltip.Root>
+      <Tooltip.Trigger
+        delay={150}
+        className={cx(
+          "relative z-10 inline-flex cursor-default rounded-sm text-muted outline-accent",
+          className,
+        )}
+      >
+        <Bot className="size-3.5" aria-label="Crawlable by search engines" role="img" />
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Positioner className="z-50" sideOffset={6}>
+          <Tooltip.Popup className="max-w-56 rounded-md bg-fg px-2 py-1 text-xs text-bg shadow-md transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0">
+            Crawlable: Google, Bing and link previews can index it.
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   )
 }
 
