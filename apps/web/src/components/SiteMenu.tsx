@@ -86,7 +86,12 @@ export function SiteMenu({ deployment }: { deployment: DeploymentSummary }) {
         </MenuItem>
       </Menu>
       <ChangeAccessDialog
-        target={{ kind: "deployment", id: deployment.id, access: deployment.access }}
+        target={{
+          kind: "deployment",
+          id: deployment.id,
+          access: deployment.access,
+          aliases: deployment.aliases,
+        }}
         {...control("access")}
       />
       <EditDetailsDialog deployment={deployment} {...control("details")} />

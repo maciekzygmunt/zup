@@ -3,7 +3,7 @@ import { accessTypes, formatBytes } from "@zup/shared"
 import { ChevronDown, Clock, FilePlus2, FolderUp, Search, Upload } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router"
-import { AccessBadge, AccessIcon, accessInfo } from "../components/access.tsx"
+import { AccessBadge, AccessIcon, accessInfo, CrawlIcon } from "../components/access.tsx"
 import { CopyRow } from "../components/copy.tsx"
 import { Menu, MenuItem } from "../components/Menu.tsx"
 import { SiteMenu } from "../components/SiteMenu.tsx"
@@ -227,6 +227,7 @@ function SiteRow({ deployment }: { deployment: DeploymentSummary }) {
             >
               <AccessIcon access={alias.access} className="shrink-0 text-muted" />
               <span className="truncate font-mono">/{alias.name}</span>
+              {alias.access === "public" && alias.indexable && <CrawlIcon className="shrink-0" />}
             </span>
           ))}
         </div>

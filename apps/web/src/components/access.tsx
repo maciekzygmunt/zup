@@ -5,7 +5,7 @@ import {
   accessTypes,
   passwordSchema,
 } from "@zup/shared"
-import { Globe, KeyRound, Lock, Search } from "lucide-react"
+import { Bot, Globe, KeyRound, Lock } from "lucide-react"
 import { useId } from "react"
 import { cx, Field, Input } from "./ui.tsx"
 
@@ -36,16 +36,21 @@ export function AccessBadge({ access }: { access: AccessType }) {
   )
 }
 
-// Access badge for an alias, with a search icon when search engines can crawl it.
+// Access badge for an alias, with a robot icon when search engines can crawl it.
 export function AliasAccessBadge({ alias }: { alias: Pick<AliasSummary, "access" | "indexable"> }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <AccessBadge access={alias.access} />
-      {alias.access === "public" && alias.indexable && (
-        <span title="Search engines can crawl it" className="inline-flex text-muted">
-          <Search className="size-3.5" aria-label="Search engines can crawl it" role="img" />
-        </span>
-      )}
+      {alias.access === "public" && alias.indexable && <CrawlIcon />}
+    </span>
+  )
+}
+
+// Marks an alias that search engines can crawl.
+export function CrawlIcon({ className }: { className?: string }) {
+  return (
+    <span title="Search engines can crawl it" className={cx("inline-flex text-muted", className)}>
+      <Bot className="size-3.5" aria-label="Search engines can crawl it" role="img" />
     </span>
   )
 }

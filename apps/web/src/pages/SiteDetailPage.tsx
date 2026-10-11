@@ -164,7 +164,7 @@ function Detail({ deployment: d }: { deployment: DeploymentDetail }) {
       </section>
 
       <ChangeAccessDialog
-        target={{ kind: "deployment", id: d.id, access: d.access }}
+        target={{ kind: "deployment", id: d.id, access: d.access, aliases: d.aliases }}
         {...control("access")}
       />
       <EditDetailsDialog deployment={d} {...control("details")} />
