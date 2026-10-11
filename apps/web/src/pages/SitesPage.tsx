@@ -45,9 +45,10 @@ export function SitesPage() {
   const access = isAccess(accessParam) ? accessParam : undefined
   const [query, setQuery] = useState(params.get("q") ?? "")
   const q = useDebounced(query.trim(), 250)
-  const list = useDeployments(q, access)
+  const list = useDeployments(q, access, { keepPrevious: true })
   const deployments = list.data?.pages.flatMap((page) => page.deployments) ?? []
-  const total = list.data?.pages[0]?.total
+  // The old total would not match the new filter, so hide it while the new results load.
+  const total = list.isPlaceholderData ? undefined : list.data?.pages[0]?.total
   const filtered = !!q || !!access
 
   useEffect(() => {
