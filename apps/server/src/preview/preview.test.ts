@@ -237,3 +237,42 @@ describe("robots.txt", () => {
     expect(await robots()).toBe(blockAll)
   })
 })
+
+describe("generated pages of an indexable alias", () => {
+  const noindex = async (path: string) => {
+    const response = await get(path, html)
+    expect(response.status).toBe(200)
+    const body = await response.text()
+    return {
+      header: response.headers.get("x-robots-tag"),
+      meta: body.includes('content="noindex"'),
+    }
+  }
+  const indexed = { header: null, meta: false }
+  const blocked = { header: "noindex", meta: true }
+
+  test("Markdown pages and folder listings drop noindex only on the indexable alias", async () => {
+    const markdownSite = await publish({ "/index.md": "# Docs" })
+    const listingSite = await publish({ "/a.png": "a", "/b/c.png": "c" })
+    for (const [name, id, indexable] of [
+      ["md-on", markdownSite.deployment.id, true],
+      ["md-off", markdownSite.deployment.id, false],
+      ["files-on", listingSite.deployment.id, true],
+    ] as const) {
+      await server.sites.putAlias(name, {
+        deploymentId: id,
+        access: { type: "public" },
+        indexable,
+        mode: "create",
+      })
+    }
+
+    expect((await noindex("/md-on/")).meta).toBe(false)
+    expect((await noindex("/md-off/")).meta).toBe(true)
+    expect((await noindex(`/u/${markdownSite.deployment.id}/`)).meta).toBe(true)
+
+    expect(await noindex("/files-on/")).toEqual(indexed)
+    expect(await noindex("/files-on/b/")).toEqual(indexed)
+    expect(await noindex(`/u/${listingSite.deployment.id}/`)).toEqual(blocked)
+  })
+})
