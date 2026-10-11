@@ -45,9 +45,10 @@ export function SitesPage() {
   const access = isAccess(accessParam) ? accessParam : undefined
   const [query, setQuery] = useState(params.get("q") ?? "")
   const q = useDebounced(query.trim(), 250)
-  const list = useDeployments(q, access)
+  const list = useDeployments(q, access, { keepPrevious: true })
   const deployments = list.data?.pages.flatMap((page) => page.deployments) ?? []
-  const total = list.data?.pages[0]?.total
+  // The old total would not match the new filter, so hide it while the new results load.
+  const total = list.isPlaceholderData ? undefined : list.data?.pages[0]?.total
   const filtered = !!q || !!access
 
   useEffect(() => {
@@ -80,7 +81,7 @@ export function SitesPage() {
           <h1 className="text-xl font-semibold">Sites</h1>
           <p className="text-[13px] text-muted tabular-nums">
             {total === undefined
-              ? " "
+              ? "\u00a0"
               : filtered
                 ? `${plural(total, "match", "matches")}`
                 : plural(total, "site")}
@@ -126,7 +127,12 @@ export function SitesPage() {
           <EmptyState />
         )
       ) : (
-        <Card className="divide-y divide-line overflow-hidden">
+        <Card
+          className={cx(
+            "divide-y divide-line overflow-hidden transition-opacity",
+            list.isPlaceholderData && "opacity-60",
+          )}
+        >
           {deployments.map((deployment) => (
             <SiteRow key={deployment.id} deployment={deployment} />
           ))}

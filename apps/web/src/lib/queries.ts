@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   QueryCache,
   QueryClient,
   queryOptions,
@@ -51,7 +52,12 @@ export const setupQuery = queryOptions({
 
 export const useInfo = () => useQuery(infoQuery).data
 
-export const useDeployments = (q: string, access: AccessType | undefined) =>
+// `keepPrevious` keeps the old results visible while a new search loads.
+export const useDeployments = (
+  q: string,
+  access: AccessType | undefined,
+  { keepPrevious = false } = {},
+) =>
   useInfiniteQuery({
     queryKey: keys.list(q, access),
     queryFn: ({ pageParam }) =>
@@ -65,6 +71,7 @@ export const useDeployments = (q: string, access: AccessType | undefined) =>
           },
         }),
       ),
+    placeholderData: keepPrevious ? keepPreviousData : undefined,
     initialPageParam: 0,
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((sum, page) => sum + page.deployments.length, 0)
