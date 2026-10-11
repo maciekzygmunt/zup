@@ -9,6 +9,8 @@
   --line: #e7e5e4;
   --card: #fff;
   --subtle: #f5f5f4;
+  /* Translucent, so hover shows on any surface (card, subtle, page). */
+  --hover: rgb(28 25 23 / 0.06);
   --accent: #4d7c0f;
   --accent-fg: #fff;
   --danger: #dc2626;
@@ -23,7 +25,8 @@
     --muted: #a8a29e;
     --line: #292524;
     --card: #1c1917;
-    --subtle: #1c1917;
+    --subtle: #262220;
+    --hover: rgb(245 245 244 / 0.08);
     --accent: #a3e635;
     --accent-fg: #0c0a09;
     --danger: #f87171;
@@ -39,6 +42,7 @@
   --color-line: var(--line);
   --color-card: var(--card);
   --color-subtle: var(--subtle);
+  --color-hover: var(--hover);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-danger: var(--danger);
@@ -59,8 +63,16 @@
     @apply outline-2 outline-offset-2 outline-accent;
   }
   button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]) {
+  [role="button"]:not([aria-disabled="true"]),
+  [role="switch"]:not([data-disabled]),
+  [role="menuitem"]:not([data-disabled]),
+  [role="option"]:not([data-disabled]),
+  input:is([type="checkbox"], [type="radio"]):not(:disabled),
+  label:has(> input:is([type="checkbox"], [type="radio"]):not(:disabled)) {
     cursor: pointer;
+  }
+  input[type="checkbox"] {
+    accent-color: var(--accent);
   }
 }
 

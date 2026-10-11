@@ -5,8 +5,8 @@ import { cx } from "./ui.tsx"
 
 const itemClass = (danger?: boolean) =>
   cx(
-    "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none select-none",
-    "data-highlighted:bg-subtle data-disabled:opacity-50",
+    "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none select-none",
+    "data-highlighted:bg-hover data-disabled:opacity-50",
     danger ? "text-danger" : "text-fg",
   )
 

@@ -5,11 +5,11 @@ export const cx = (...classes: (string | false | null | undefined)[]) =>
   classes.filter(Boolean).join(" ")
 
 const buttonVariants = {
-  primary: "bg-fg text-bg hover:opacity-85",
-  accent: "bg-accent text-accent-fg hover:opacity-90",
-  secondary: "border border-line bg-card text-fg hover:bg-subtle",
-  ghost: "text-muted hover:bg-subtle hover:text-fg",
-  danger: "bg-danger text-white hover:opacity-90",
+  primary: "bg-fg text-bg hover:bg-fg/80",
+  accent: "bg-accent text-accent-fg hover:bg-accent/80",
+  secondary: "border border-line bg-card text-fg hover:border-muted/50 hover:bg-subtle",
+  ghost: "text-muted hover:bg-hover hover:text-fg",
+  danger: "bg-danger text-white hover:bg-danger/80",
 }
 
 export const buttonClass = (
@@ -18,7 +18,7 @@ export const buttonClass = (
 ) =>
   cx(
     "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap select-none",
-    "transition-[opacity,background-color,color,transform] duration-150 active:scale-[0.98]",
+    "transition-[opacity,background-color,border-color,color,transform] duration-150 active:scale-[0.98]",
     "disabled:pointer-events-none disabled:opacity-50",
     size === "sm" && "h-7 px-2.5 text-[13px]",
     size === "md" && "h-8 px-3 text-sm",

@@ -532,10 +532,10 @@ function MoveAlias({ alias, close }: CloseProps & { alias: AliasSummary }) {
             <label
               key={d.id}
               className={cx(
-                "flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 has-focus-visible:outline-2 has-focus-visible:outline-accent",
+                "flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 transition-colors has-focus-visible:outline-2 has-focus-visible:outline-accent",
                 selected === d.id
                   ? "border-accent bg-accent/5"
-                  : "border-transparent hover:bg-subtle",
+                  : "border-transparent hover:bg-hover",
               )}
             >
               <input
