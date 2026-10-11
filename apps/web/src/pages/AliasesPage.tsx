@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 import { AliasMenu } from "../components/AliasMenu.tsx"
-import { AccessBadge } from "../components/access.tsx"
+import { AliasAccessBadge } from "../components/access.tsx"
 import { CopyButton } from "../components/copy.tsx"
 import { Card, ErrorNote, Mono, Spinner } from "../components/ui.tsx"
 import { errorMessage } from "../lib/api.ts"
@@ -69,7 +69,7 @@ export function AliasesPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-2">
-                      <AccessBadge access={alias.access} />
+                      <AliasAccessBadge alias={alias} />
                     </td>
                     <td
                       className="hidden px-4 py-2 whitespace-nowrap text-muted md:table-cell"

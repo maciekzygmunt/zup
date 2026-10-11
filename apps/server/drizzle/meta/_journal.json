@@ -15,6 +15,13 @@
       "when": 1791654351862,
       "tag": "0001_auto_expiry",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791725694507,
+      "tag": "0002_indexable_aliases",
+      "breakpoints": true
     }
   ]
 }

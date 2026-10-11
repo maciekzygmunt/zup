@@ -34,6 +34,7 @@ zup report.html --public | --protect | --password 'correct horse battery'
 zup ./dist --alias demo --public     # also at https://preview.example.com/demo/
 zup ./dist --alias demo --update     # move the alias to the new upload (keeps its access;
                                      # the old upload is deleted after 7 days)
+zup ./dist --alias demo --public --index  # let search engines crawl /demo/
 zup notes.md -e 7d                   # delete after 7 days
 
 zup ls [search]                      # --access public|private|password, --json
@@ -66,6 +67,11 @@ stored, so a lost password cannot be shown again — `zup share` makes a new wor
 new password ends all old links and cookies.
 
 **Private sites** use your dashboard session. Logging out (or revoking the session) ends access.
+
+**Search engines** are blocked by `robots.txt` on the preview host. A public alias can let them in:
+"Allow search engines" in its access dialog, `--index` in the CLI (`--no-index` to stop), or
+`indexable` in MCP. Access other than public turns it off. Deployment URLs (`/u/<id>/`) stay
+blocked, because they change on each upload. A `/sitemap.xml` in the site is listed in `robots.txt`.
 
 ## MCP (Claude Code, Claude Desktop)
 

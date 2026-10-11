@@ -5,7 +5,12 @@ import {
   parseExpiry,
   toManifestPath,
 } from "@zup/shared"
-import { type AccessFlags, accessFromFlags } from "../access.ts"
+import {
+  type AccessFlags,
+  accessFromFlags,
+  type IndexFlags,
+  indexableFromFlags,
+} from "../access.ts"
 import { client, session, unwrap } from "../api.ts"
 import { scan } from "../scan.ts"
 import {
@@ -25,22 +30,29 @@ import {
 } from "../ui.ts"
 import { uploadMissing } from "../upload.ts"
 
-export type DeployFlags = AccessFlags & {
-  title?: string
-  alias?: string
-  update?: boolean
-  expires?: string
-  entrypoint?: string
-  spa?: boolean
-  "no-spa"?: boolean
-  "dry-run"?: boolean
-  json?: boolean
-  open?: boolean
-  server?: string
-}
+export type DeployFlags = AccessFlags &
+  IndexFlags & {
+    title?: string
+    alias?: string
+    update?: boolean
+    expires?: string
+    entrypoint?: string
+    spa?: boolean
+    "no-spa"?: boolean
+    "dry-run"?: boolean
+    json?: boolean
+    open?: boolean
+    server?: string
+  }
 
 export async function deploy(inputs: string[], flags: DeployFlags) {
   const access = accessFromFlags(flags)
+  const indexable = indexableFromFlags(flags)
+  if (indexable !== undefined && !flags.alias) {
+    throw new CliError("--index and --no-index need --alias")
+  }
+  // Checked before upload: the server refuses it for an alias that is not public.
+  if (indexable && access?.type !== "public") throw new CliError("--index needs --public")
   const expiresAt = flags.expires ? parseExpiry(flags.expires).toISOString() : undefined
   const { files, name, skippedByGit } = await scan(inputs.length ? inputs : ["."])
   const entrypoint = flags.entrypoint ? toManifestPath(flags.entrypoint) : undefined
@@ -81,7 +93,7 @@ export async function deploy(inputs: string[], flags: DeployFlags) {
     }),
   )
 
-  const alias = flags.alias ? await claimAlias(flags, deployment.id, access) : undefined
+  const alias = flags.alias ? await claimAlias(flags, deployment.id, access, indexable) : undefined
 
   if (flags.json) {
     process.stdout.write(`${JSON.stringify({ deployment, key, alias }, null, 2)}\n`)
@@ -94,6 +106,7 @@ export async function deploy(inputs: string[], flags: DeployFlags) {
   rows([
     ["Alias", alias?.alias.url],
     ["Access", accessBadge(alias?.alias.access ?? deployment.access)],
+    ["Search engines", alias?.alias.indexable ? "allowed" : null],
     ["Password", password],
     ["Share link", shareUrl],
     [
@@ -119,10 +132,18 @@ export async function deploy(inputs: string[], flags: DeployFlags) {
     openInBrowser(browserUrl(current.server, target.url, target.access))
   }
 
-  async function claimAlias(flags: DeployFlags, deploymentId: string, access?: AccessInput) {
+  async function claimAlias(
+    flags: DeployFlags,
+    deploymentId: string,
+    access?: AccessInput,
+    indexable?: boolean,
+  ) {
     const name = flags.alias!
     const put = (mode: "create" | "upsert") =>
-      api.aliases[":name"].$put({ param: { name }, json: { deploymentId, access, mode } })
+      api.aliases[":name"].$put({
+        param: { name },
+        json: { deploymentId, access, indexable, mode },
+      })
     const created = await put("create")
     if (created.status !== 409) return unwrap(created)
     const move =

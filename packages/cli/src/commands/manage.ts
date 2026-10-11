@@ -1,6 +1,11 @@
 import { accessTypes, formatBytes, parseExpiry } from "@zup/shared"
 import { z } from "zod"
-import { type AccessFlags, accessFromFlags } from "../access.ts"
+import {
+  type AccessFlags,
+  accessFromFlags,
+  type IndexFlags,
+  indexableFromFlags,
+} from "../access.ts"
 import { type Client, client, session, unwrap } from "../api.ts"
 import { deploymentIdOf, describe, resolveTarget, type Target } from "../target.ts"
 import {
@@ -65,7 +70,7 @@ export async function show(input: string, flags: Common) {
     ["URL", detail.url],
     ...detail.aliases.map((alias): [string, string] => [
       "Alias",
-      `${alias.url} ${dim(`(${alias.access})`)}`,
+      `${alias.url} ${dim(`(${alias.access}${alias.indexable ? ", search engines allowed" : ""})`)}`,
     ]),
     ["Access", accessBadge(detail.access)],
     ["Root", detail.entrypoint ?? "file listing"],
@@ -99,14 +104,18 @@ async function currentAccess(api: Client, target: Target) {
 export async function alias(
   input: string,
   name: string,
-  flags: Common & AccessFlags & { update?: boolean },
+  flags: Common & AccessFlags & IndexFlags & { update?: boolean },
 ) {
+  const access = accessFromFlags(flags)
+  const indexable = indexableFromFlags(flags)
   const { current, api } = await connect(flags)
   const target = await resolveTarget(current, api, input)
   const deploymentId = await deploymentIdOf(api, target)
-  const access = accessFromFlags(flags)
   const put = (mode: "create" | "upsert") =>
-    api.aliases[":name"].$put({ param: { name }, json: { deploymentId, access, mode } })
+    api.aliases[":name"].$put({
+      param: { name },
+      json: { deploymentId, access, indexable, mode },
+    })
   let response = await put("create")
   if (response.status === 409) {
     const move =
@@ -119,6 +128,7 @@ export async function alias(
   process.stdout.write(`${green("✓")} ${result.alias.url} → ${deploymentId}\n`)
   rows([
     ["Access", accessBadge(result.alias.access)],
+    ["Search engines", result.alias.indexable ? "allowed" : null],
     ["Password", access?.type === "password" && !flags.password ? access.password : null],
     ["Share link", result.key?.shareUrl],
   ])
@@ -138,21 +148,41 @@ export async function unalias(name: string, flags: Common) {
   info(`${green("✓")} Deleted alias ${name}`)
 }
 
-export async function setAccess(input: string, flags: Common & AccessFlags) {
+export async function setAccess(input: string, flags: Common & AccessFlags & IndexFlags) {
   const access = accessFromFlags(flags)
-  if (!access) throw new CliError("Pass --public, --private, --protect or --password <key>")
+  const indexable = indexableFromFlags(flags)
+  if (!access && indexable === undefined) {
+    throw new CliError(
+      "Pass --public, --private, --protect, --password <key>, --index or --no-index",
+    )
+  }
   const { current, api } = await connect(flags)
   const target = await resolveTarget(current, api, input)
+  if (target.kind === "deployment" && indexable !== undefined) {
+    throw new CliError("Only aliases can allow search engines. Pass an alias name.")
+  }
   const result =
     target.kind === "alias"
       ? await unwrap(
-          api.aliases[":name"].$patch({ param: { name: target.name }, json: { access } }),
+          api.aliases[":name"].$patch({
+            param: { name: target.name },
+            json: { access, indexable },
+          }),
         )
       : await unwrap(api.deployments[":id"].$patch({ param: { id: target.id }, json: { access } }))
   if (flags.json) return printJson(result)
-  info(`${green("✓")} ${describe(target)} is now ${accessBadge(access.type)}`)
+  const site = "alias" in result ? result.alias : result.deployment
+  info(`${green("✓")} ${describe(target)} is now ${accessBadge(site.access)}`)
   rows([
-    ["Password", access.type === "password" && !flags.password ? access.password : null],
+    [
+      "Search engines",
+      "alias" in result && result.alias.access === "public"
+        ? result.alias.indexable
+          ? "allowed"
+          : "blocked"
+        : null,
+    ],
+    ["Password", access?.type === "password" && !flags.password ? access.password : null],
     ["Share link", result.key?.shareUrl],
   ])
 }

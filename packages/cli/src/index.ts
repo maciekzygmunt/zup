@@ -36,6 +36,7 @@ ${bold("Usage")}
   zup alias <site> <name>         Point an alias at a deployment (--update to move)
   zup unalias <name>              Delete an alias
   zup access <site> <flag>        Change access: --public, --private, --protect, --password
+                                  For an alias also --index, --no-index
   zup expire <site> <when|never>  Set or clear expiry (30m, 12h, 7d, 2w or a date)
   zup rename <site> <title>       Change the title
   zup share <site>                Print a share link for a password-protected site
@@ -53,6 +54,8 @@ ${bold("Publish options")}
       --password <key>     Same, with your own password (8+ characters)
   -a, --alias <name>       Also serve it at <sites-url>/<name>/
   -u, --update             Move the alias if it already exists (old deployment expires in 7d)
+      --index              Let search engines crawl the alias (needs --public)
+      --no-index           Stop search engines from crawling the alias
   -e, --expires <when>     Delete after 30m, 12h, 7d, 2w or at a date
       --entrypoint <file>  File served at the root
       --no-spa             No fallback to the entrypoint for unknown paths
@@ -133,6 +136,8 @@ async function main(argv: string[]) {
       server: { type: "string" },
       force: { type: "boolean", short: "f" },
       access: { type: "string" },
+      index: { type: "boolean" },
+      "no-index": { type: "boolean" },
       limit: { type: "string" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
@@ -175,7 +180,7 @@ async function main(argv: string[]) {
       need(1, "unalias <name>")
       return unalias(args[0]!, flags)
     case "access":
-      need(1, "access <site> --public|--private|--protect|--password <key>")
+      need(1, "access <site> --public|--private|--protect|--password <key>|--index|--no-index")
       return setAccess(args[0]!, flags)
     case "expire":
       need(2, "expire <site> <30m|12h|7d|2w|date|never>")

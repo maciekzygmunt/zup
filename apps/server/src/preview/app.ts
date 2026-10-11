@@ -47,6 +47,8 @@ type Site = {
   name: string
   scope: string
   access: { access: Deployment["access"]; passwordHash: string | null }
+  // A public alias that search engines may index. Generated pages then drop noindex.
+  indexable: boolean
 }
 
 type Deps = { config: Config; db: Db; blobs: BlobStore; owners: OwnerSessions }
@@ -74,11 +76,11 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     c.req.header("sec-fetch-dest") === "document" ||
     (c.req.header("accept") ?? "").includes("text/html")
 
-  const html = (c: Context, body: string, status = 200) => {
+  const html = (c: Context, body: string, status = 200, indexable = false) => {
     c.header("Cache-Control", "no-store")
     c.header("X-Content-Type-Options", "nosniff")
     c.header("Referrer-Policy", "same-origin")
-    c.header("X-Robots-Tag", "noindex")
+    if (!indexable) c.header("X-Robots-Tag", "noindex")
     return c.html(body, status as 200)
   }
 
@@ -119,6 +121,7 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
           name: deployment.title ?? id,
           scope: siteScope({ deploymentId: id }),
           access: deployment,
+          indexable: false,
         }
       )
     }
@@ -133,6 +136,7 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
           name,
           scope: siteScope({ alias: name }),
           access: alias,
+          indexable: alias.access === "public" && alias.indexable,
         }) ||
       null
     )
@@ -223,7 +227,7 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     if (isMarkdownPath(file.path) && wantsHtml(c) && c.req.query("raw") === undefined) {
       const source = await blobs.file(file.hash).text()
       const title = /^#\s+(.+)$/m.exec(source)?.[1] ?? file.path.split("/").pop()!
-      return c.html(markdownPage(title, markdown.render(source)), 200, headers)
+      return c.html(markdownPage(title, markdown.render(source), site.indexable), 200, headers)
     }
 
     const blob = blobs.file(file.hash)
@@ -243,6 +247,20 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     headers["Content-Length"] = String(file.size)
     return new Response(c.req.method === "HEAD" ? null : blob, { status: 200, headers })
   }
+
+  const siteListing = (c: Context, site: Site, dir: string, entries: ListingEntry[]) =>
+    html(
+      c,
+      listingPage({
+        siteName: site.name,
+        base: site.base,
+        dir,
+        entries,
+        indexable: site.indexable,
+      }),
+      200,
+      site.indexable,
+    )
 
   // Owner-only file browser at <site>/_src/.
   async function source(c: Context, site: Site, path: string) {
@@ -302,7 +320,7 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     if (path === "/") {
       if (!deployment.entrypoint) {
         const entries = await listing(site, "/", site.base)
-        return html(c, listingPage({ siteName: site.name, base: site.base, dir: "/", entries }))
+        return siteListing(c, site, "/", entries)
       }
       const entry = await findFile(deployment.id, deployment.entrypoint)
       if (!entry) return notFound(c)
@@ -319,9 +337,7 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
         if (file) return sendFile(c, site, file)
       }
       const entries = await listing(site, path, site.base)
-      if (entries.length) {
-        return html(c, listingPage({ siteName: site.name, base: site.base, dir: path, entries }))
-      }
+      if (entries.length) return siteListing(c, site, path, entries)
     } else {
       const file = await findFile(deployment.id, path)
       if (file) return sendFile(c, site, file)
@@ -402,7 +418,29 @@ export function createPreviewApp({ config, db, blobs, owners }: Deps) {
     return c.redirect(target, 303)
   }
 
-  app.get("/robots.txt", (c) => c.text("User-agent: *\nDisallow: /\n"))
+  // Blocks everything except public aliases marked indexable. Crawlers use the most specific
+  // rule. `/<name>$` lets them follow the redirect to `/<name>/`.
+  app.get("/robots.txt", async (c) => {
+    const open = await db
+      .select({ name: aliases.name, sitemap: deploymentFiles.path })
+      .from(aliases)
+      .leftJoin(
+        deploymentFiles,
+        and(
+          eq(deploymentFiles.deploymentId, aliases.deploymentId),
+          eq(deploymentFiles.path, "/sitemap.xml"),
+        ),
+      )
+      .where(and(eq(aliases.indexable, true), eq(aliases.access, "public")))
+      .orderBy(aliases.name)
+    const allow = open.map(({ name }) => `Allow: /${name}$\nAllow: /${name}/\n`).join("")
+    const sitemaps = open
+      .filter(({ sitemap }) => sitemap)
+      .map(({ name }) => `Sitemap: ${config.previewOrigin}/${name}/sitemap.xml\n`)
+      .join("")
+    c.header("Cache-Control", "public, max-age=300")
+    return c.text(`User-agent: *\n${allow}Disallow: /\n${sitemaps && `\n${sitemaps}`}`)
+  })
 
   app.get("/", (c) =>
     html(c, messagePage({ status: 200, title: "zup", message: "Nothing to see at the root." })),

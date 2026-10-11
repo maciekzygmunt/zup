@@ -30,6 +30,12 @@ const expiryField = z
   .string()
   .describe('Expiry as a duration ("30m", "12h", "7d", "2w") or an ISO date')
 
+const indexableField = z
+  .boolean()
+  .describe(
+    "Let search engines crawl the alias. Only for public aliases. Omitted keeps the current value (off for a new alias).",
+  )
+
 const text = (value: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
 })
@@ -87,6 +93,7 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
               .describe(
                 "Stable name: the site is also served at <preview-url>/<alias>/. Moves the alias if it exists.",
               ),
+            indexable: indexableField.optional(),
             entrypoint: z
               .string()
               .optional()
@@ -100,6 +107,13 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         },
         (input) =>
           run(async () => {
+            // Checked before upload, so a bad request leaves no deployment behind.
+            if (input.indexable !== undefined && !input.alias) {
+              throw new HttpError(400, "invalid_request", "indexable needs an alias")
+            }
+            if (input.indexable && input.access !== "public") {
+              throw new HttpError(422, "not_public", "Only public aliases can allow search engines")
+            }
             const uploads = input.files.map((file) => {
               const bytes =
                 file.encoding === "base64"
@@ -131,6 +145,7 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
               ? await sites.putAlias(input.alias, {
                   deploymentId: deployment.id,
                   access,
+                  indexable: input.indexable,
                   mode: "upsert",
                 })
               : undefined
@@ -140,7 +155,11 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
               access: deployment.access,
               password: key?.key,
               shareUrl: key?.shareUrl,
-              alias: alias && { url: alias.alias.url, shareUrl: alias.key?.shareUrl },
+              alias: alias && {
+                url: alias.alias.url,
+                shareUrl: alias.key?.shareUrl,
+                indexable: alias.alias.indexable,
+              },
               expiresAt: deployment.expiresAt,
             }
           }),
@@ -251,18 +270,20 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         {
           title: "Set alias",
           description:
-            "Point an alias at a deployment (creates or moves it). Without access, a moved alias keeps its access and password. The deployment it leaves expires in 7 days unless another alias points to it.",
+            "Point an alias at a deployment (creates or moves it). Without access, a moved alias keeps its access and password. Access other than public turns indexable off. The deployment it leaves expires in 7 days unless another alias points to it.",
           inputSchema: z.object({
             name: aliasNameSchema,
             deploymentId: z.string(),
             access: accessField.optional(),
+            indexable: indexableField.optional(),
           }),
         },
-        ({ name, deploymentId, access }) =>
+        ({ name, deploymentId, access, indexable }) =>
           run(() =>
             sites.putAlias(name, {
               deploymentId,
               access: access && toAccess(access),
+              indexable,
               mode: "upsert",
             }),
           ),

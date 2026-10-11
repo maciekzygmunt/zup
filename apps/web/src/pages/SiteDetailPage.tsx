@@ -17,7 +17,7 @@ import { type ReactNode, useState } from "react"
 import { Link, useParams } from "react-router"
 import { toast } from "sonner"
 import { AliasMenu } from "../components/AliasMenu.tsx"
-import { AccessBadge } from "../components/access.tsx"
+import { AccessBadge, AliasAccessBadge } from "../components/access.tsx"
 import { CopyButton } from "../components/copy.tsx"
 import { copyShareLink } from "../components/SiteMenu.tsx"
 import {
@@ -256,7 +256,7 @@ function AliasesSection({
                 <Mono className="truncate font-medium">/{alias.name}</Mono>
                 <Mono className="truncate text-muted">{alias.url}</Mono>
               </div>
-              <AccessBadge access={alias.access} />
+              <AliasAccessBadge alias={alias} />
               <AliasMenu alias={alias} />
             </div>
           ))}

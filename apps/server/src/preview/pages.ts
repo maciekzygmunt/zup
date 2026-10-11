@@ -68,16 +68,22 @@ const markdownCss = `
 .markdown img { max-width: 100%; } .markdown hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
 `
 
-type PageOptions = { title: string; body: string; extraCss?: string; script?: string }
+// `indexable` drops the noindex tag. Only for site content of an indexable alias.
+type PageOptions = {
+  title: string
+  body: string
+  extraCss?: string
+  script?: string
+  indexable?: boolean
+}
 
-export function page({ title, body, extraCss = "", script }: PageOptions) {
+export function page({ title, body, extraCss = "", script, indexable = false }: PageOptions) {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>${escapeHtml(title)}</title>
+${indexable ? "" : '<meta name="robots" content="noindex">\n'}<title>${escapeHtml(title)}</title>
 <style>${css}${extraCss}</style>
 </head>
 <body>
@@ -156,6 +162,7 @@ export function listingPage(options: {
   base: string
   dir: string
   entries: ListingEntry[]
+  indexable?: boolean
 }) {
   const rows = options.entries
     .map(
@@ -167,6 +174,7 @@ export function listingPage(options: {
     title: `${options.dir} · ${options.siteName}`,
     body: `<main class="wrap">${crumbs(options.base, options.dir, options.siteName)}
 <div class="panel"><table>${rows}</table></div></main>`,
+    indexable: options.indexable,
   })
 }
 
@@ -198,5 +206,10 @@ export function sourcePage(options: {
   })
 }
 
-export const markdownPage = (title: string, html: string) =>
-  page({ title, extraCss: markdownCss, body: `<article class="markdown">${html}</article>` })
+export const markdownPage = (title: string, html: string, indexable = false) =>
+  page({
+    title,
+    extraCss: markdownCss,
+    body: `<article class="markdown">${html}</article>`,
+    indexable,
+  })

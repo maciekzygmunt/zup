@@ -189,3 +189,90 @@ describe("access", () => {
     expect((await get(`/u/${deployment.id}/`)).status).toBe(404)
   })
 })
+
+describe("robots.txt", () => {
+  const robots = async () => (await get("/robots.txt")).text()
+  const blockAll = "User-agent: *\nDisallow: /\n"
+
+  test("blocks everything when no alias is indexable", async () => {
+    expect(await robots()).toBe(blockAll)
+  })
+
+  test("allows public indexable aliases, lists their sitemaps and keeps the setting on a move", async () => {
+    const first = await publish({ "/index.html": "v1" })
+    const second = await publish({ "/index.html": "v2", "/sitemap.xml": "<urlset/>" })
+    await server.sites.putAlias("landing", {
+      deploymentId: first.deployment.id,
+      access: { type: "public" },
+      indexable: true,
+      mode: "create",
+    })
+    expect(await robots()).toBe("User-agent: *\nAllow: /landing$\nAllow: /landing/\nDisallow: /\n")
+
+    const moved = await server.sites.putAlias("landing", {
+      deploymentId: second.deployment.id,
+      mode: "upsert",
+    })
+    expect(moved.alias.indexable).toBe(true)
+    const response = await get("/robots.txt")
+    expect(response.headers.get("cache-control")).toBe("public, max-age=300")
+    expect(await response.text()).toBe(
+      "User-agent: *\nAllow: /landing$\nAllow: /landing/\nDisallow: /\n\n" +
+        "Sitemap: http://127.0.0.1:4100/landing/sitemap.xml\n",
+    )
+    // The page itself carries no noindex header.
+    const page = await get("/landing/")
+    expect(page.status).toBe(200)
+    expect(page.headers.get("x-robots-tag")).toBeNull()
+  })
+
+  test("leaving public access turns indexing off", async () => {
+    await server.sites.updateAlias("landing", {
+      access: { type: "password", password: "landing key" },
+    })
+    expect(await robots()).toBe(blockAll)
+    // Switching back to public does not turn it on again.
+    const { alias } = await server.sites.updateAlias("landing", { access: { type: "public" } })
+    expect(alias.indexable).toBe(false)
+    expect(await robots()).toBe(blockAll)
+  })
+})
+
+describe("generated pages of an indexable alias", () => {
+  const noindex = async (path: string) => {
+    const response = await get(path, html)
+    expect(response.status).toBe(200)
+    const body = await response.text()
+    return {
+      header: response.headers.get("x-robots-tag"),
+      meta: body.includes('content="noindex"'),
+    }
+  }
+  const indexed = { header: null, meta: false }
+  const blocked = { header: "noindex", meta: true }
+
+  test("Markdown pages and folder listings drop noindex only on the indexable alias", async () => {
+    const markdownSite = await publish({ "/index.md": "# Docs" })
+    const listingSite = await publish({ "/a.png": "a", "/b/c.png": "c" })
+    for (const [name, id, indexable] of [
+      ["md-on", markdownSite.deployment.id, true],
+      ["md-off", markdownSite.deployment.id, false],
+      ["files-on", listingSite.deployment.id, true],
+    ] as const) {
+      await server.sites.putAlias(name, {
+        deploymentId: id,
+        access: { type: "public" },
+        indexable,
+        mode: "create",
+      })
+    }
+
+    expect((await noindex("/md-on/")).meta).toBe(false)
+    expect((await noindex("/md-off/")).meta).toBe(true)
+    expect((await noindex(`/u/${markdownSite.deployment.id}/`)).meta).toBe(true)
+
+    expect(await noindex("/files-on/")).toEqual(indexed)
+    expect(await noindex("/files-on/b/")).toEqual(indexed)
+    expect(await noindex(`/u/${listingSite.deployment.id}/`)).toEqual(blocked)
+  })
+})

@@ -11,6 +11,7 @@ import {
   isHtmlPath,
   type ManifestFile,
   type putAliasSchema,
+  type UpdateAliasInput,
   type UpdateDeploymentInput,
 } from "@zup/shared"
 import {
@@ -73,11 +74,21 @@ export function createSiteService({
     }
   }
 
+  // Only public aliases can be indexed: other access turns it off, and asking for it fails.
+  function indexableFor(access: AccessType, requested: boolean | undefined, current: boolean) {
+    if (access === "public") return requested ?? current
+    if (requested) {
+      throw new HttpError(422, "not_public", "Only public aliases can allow search engines")
+    }
+    return false
+  }
+
   const aliasSummary = (alias: Alias, deploymentTitle: string | null): AliasSummary => ({
     name: alias.name,
     deploymentId: alias.deploymentId,
     deploymentTitle,
     access: alias.access,
+    indexable: alias.indexable,
     url: aliasUrl(alias.name),
     createdAt: alias.createdAt.toISOString(),
     updatedAt: alias.updatedAt.toISOString(),
@@ -298,7 +309,7 @@ export function createSiteService({
       if (existing && input.mode === "create") {
         throw new HttpError(409, "alias_exists", `Alias ${name} already exists`)
       }
-      // Moving an alias keeps its access (and password) unless new access is given.
+      // Moving an alias keeps its access, password and indexable unless new values are given.
       const access = input.access
         ? await storedAccess(input.access, { alias: name })
         : (existing ?? { access: "private" as const, passwordHash: null })
@@ -308,6 +319,7 @@ export function createSiteService({
         deploymentId: input.deploymentId,
         access: access.access,
         passwordHash: access.passwordHash,
+        indexable: indexableFor(access.access, input.indexable, existing?.indexable ?? false),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }
@@ -364,16 +376,23 @@ export function createSiteService({
       }
     },
 
-    async updateAlias(name: string, input: AccessInput) {
-      await requireAlias(name)
-      const { key, ...access } = await storedAccess(input, { alias: name })
+    async updateAlias(name: string, input: UpdateAliasInput) {
+      const current = await requireAlias(name)
+      // Omitted access keeps the current access and password.
+      const granted = input.access && (await storedAccess(input.access, { alias: name }))
+      const { access, passwordHash } = granted ?? current
       await db
         .update(aliases)
-        .set({ ...access, updatedAt: new Date() })
+        .set({
+          access,
+          passwordHash,
+          indexable: indexableFor(access, input.indexable, current.indexable),
+          updatedAt: new Date(),
+        })
         .where(eq(aliases.name, name))
       const alias = await requireAlias(name)
       const { title } = await requireDeployment(alias.deploymentId)
-      return { alias: aliasSummary(alias, title), key }
+      return { alias: aliasSummary(alias, title), key: granted?.key }
     },
 
     async deleteAlias(name: string) {

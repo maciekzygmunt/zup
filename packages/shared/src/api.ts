@@ -39,12 +39,20 @@ export const putAliasSchema = z.object({
   deploymentId: z.string().min(1),
   // Omitted access keeps the alias's current access (or private for a new alias).
   access: accessInputSchema.optional(),
+  // Lets search engines crawl a public alias. Omitted keeps the current value (false for a
+  // new alias). Access other than public turns it off.
+  indexable: z.boolean().optional(),
   // "create" fails when the alias exists; "upsert" moves it.
   mode: z.enum(["create", "upsert"]).default("upsert"),
 })
 export type PutAliasInput = z.input<typeof putAliasSchema>
 
-export const updateAliasSchema = z.object({ access: accessInputSchema })
+export const updateAliasSchema = z
+  .object({ access: accessInputSchema.optional(), indexable: z.boolean().optional() })
+  .refine((input) => input.access || input.indexable !== undefined, {
+    message: "Pass access or indexable",
+  })
+export type UpdateAliasInput = z.infer<typeof updateAliasSchema>
 
 export const shareLinkSchema = z.union([
   z.object({ deploymentId: z.string().min(1) }),
@@ -58,6 +66,8 @@ export type AliasSummary = {
   deploymentId: string
   deploymentTitle: string | null
   access: AccessType
+  // Search engines may crawl it while access is public.
+  indexable: boolean
   url: string
   createdAt: string
   updatedAt: string

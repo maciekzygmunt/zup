@@ -1,0 +1,1 @@
+ALTER TABLE `aliases` ADD `indexable` integer DEFAULT false NOT NULL;

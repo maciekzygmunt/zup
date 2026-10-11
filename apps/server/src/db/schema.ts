@@ -44,6 +44,8 @@ export const aliases = sqliteTable(
       .references(() => deployments.id, { onDelete: "cascade" }),
     access: text({ enum: accessTypes }).notNull(),
     passwordHash: text("password_hash"),
+    // Search engines may crawl it. Only applies while access is public.
+    indexable: integer({ mode: "boolean" }).notNull().default(false),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },

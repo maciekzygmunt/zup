@@ -62,7 +62,12 @@ export function AliasMenu({ alias }: { alias: AliasSummary }) {
         </MenuItem>
       </Menu>
       <ChangeAccessDialog
-        target={{ kind: "alias", name: alias.name, access: alias.access }}
+        target={{
+          kind: "alias",
+          name: alias.name,
+          access: alias.access,
+          indexable: alias.indexable,
+        }}
         {...control("access")}
       />
       <MoveAliasDialog alias={alias} {...control("move")} />
