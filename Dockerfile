@@ -1,5 +1,5 @@
 # Build the dashboard, the CLI and a single-file server bundle.
-FROM oven/bun:1.3 AS build
+FROM oven/bun:1.4.4 AS build
 WORKDIR /src
 COPY . .
 RUN bun install --frozen-lockfile
@@ -8,7 +8,7 @@ RUN bun run --filter @zup/web build \
   && bun build apps/server/src/index.ts --target bun --outfile dist/server.js
 
 # The runtime needs no node_modules: server.js contains every dependency.
-FROM oven/bun:1.3-slim
+FROM oven/bun:1.4.4-slim
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
