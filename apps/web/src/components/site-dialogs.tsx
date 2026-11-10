@@ -163,15 +163,23 @@ function ChangeAccess({ target, close }: CloseProps & { target: AccessTarget }) 
                   : "Make an alias public on the Aliases page to allow it."}
               </p>
             ) : (
-              publicAliases.map((alias) => (
-                <CrawlCheckbox
-                  key={alias.name}
-                  name={alias.name}
-                  checked={crawl[alias.name] ?? false}
-                  onChange={(checked) => setCrawl({ ...crawl, [alias.name]: checked })}
-                  label={`Allow search engines on /${alias.name}`}
-                />
-              ))
+              <>
+                {/* A non-public deployment can still be open through its public aliases. */}
+                {draft.type !== "public" && (
+                  <p className="text-xs text-muted">
+                    Each alias below stays public. Anyone can open it.
+                  </p>
+                )}
+                {publicAliases.map((alias) => (
+                  <CrawlCheckbox
+                    key={alias.name}
+                    name={alias.name}
+                    checked={crawl[alias.name] ?? false}
+                    onChange={(checked) => setCrawl({ ...crawl, [alias.name]: checked })}
+                    label={`Allow search engines on /${alias.name}`}
+                  />
+                ))}
+              </>
             )}
           </div>
         )}
