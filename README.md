@@ -10,9 +10,10 @@
 
 - **CLI** — uploads only new content (content-addressed) and prints the URL.
 - **Access** — private (only you), public, or password (with share links that unlock without typing).
-- **Aliases** — stable names like `https://preview.example.com/report/` that you move to a new upload.
+- **Slugs** — one URL per site, like `https://preview.example.com/report/`. Pick it, or get a random one.
+  `--update` replaces the files and keeps the URL.
 - **Expiry** — `--expires 7d`; expired uploads are deleted.
-- **Dashboard** — list, search, drag-and-drop upload, access, aliases, share links, sessions, passkeys.
+- **Dashboard** — list, search, drag-and-drop upload, access, slugs, share links, sessions, passkeys.
 - **MCP** — Claude Code / Claude Desktop can publish pages for you, with OAuth login.
 
 ![zup dashboard: list of sites with private, password and public access](apps/landing/public/screens/sites-dark.png)
@@ -31,16 +32,16 @@ zup login https://zup.example.com    # approve the code in the dashboard
 ```sh
 zup ./dist                           # private site
 zup report.html --public | --protect | --password 'correct horse battery'
-zup ./dist --alias demo --public     # also at https://preview.example.com/demo/
-zup ./dist --alias demo --update     # move the alias to the new upload (keeps its access;
-                                     # the old upload is deleted after 7 days)
-zup ./dist --alias demo --public --index  # let search engines crawl /demo/
+zup ./dist --slug demo --public      # at https://preview.example.com/demo/ (fails if demo is in use)
+zup ./dist --slug demo --update      # replace the files of demo (keeps its URL and access;
+                                     # the old files are deleted)
+zup ./dist --slug demo --public --index   # let search engines crawl /demo/
 zup notes.md -e 7d                   # delete after 7 days
 
 zup ls [search]                      # --access public|private|password, --json
 zup info | open | share <site>       # share: new share link for a password site
 zup access <site> --private          # or --public, --protect, --password <key>
-zup alias <site> demo                # zup unalias demo to remove
+zup slug <site> demo-old             # change the URL (the old URL stops working)
 zup expire <site> never              # or 30m, 12h, 7d, 2w, a date
 zup rename <site> "Q3 report"
 zup rm <site>...
@@ -48,7 +49,7 @@ zup pull demo ./copy                 # download files, verified by SHA-256
 zup upgrade                          # latest CLI from your server
 ```
 
-`<site>` is a deployment id, an alias, or a site URL. `--protect` generates a password and prints
+`<site>` is a slug or a site URL. `--protect` generates a password and prints
 it once with a share link. Run `zup --help` for every option.
 
 Uploading a folder skips `.git`, `node_modules`, `.env*` (except `.env.example`), `.npmrc`,
@@ -59,7 +60,7 @@ Environment: `ZUP_SERVER`, `ZUP_TOKEN` (for CI), `ZUP_PASSWORD` (used by `--prot
 
 ## Access
 
-A deployment and each alias have their own access: private (default), public, or password.
+Each site has one access level: private (default), public, or password.
 
 **Password sites** remember a correct password for 30 days. Share links (`…/#password=…` or
 `…/#token=…`) unlock without typing; the part after `#` never reaches the server. Only a hash is
@@ -68,10 +69,10 @@ new password ends all old links and cookies.
 
 **Private sites** use your dashboard session. Logging out (or revoking the session) ends access.
 
-**Search engines** are blocked by `robots.txt` on the preview host. A public alias can let them in:
+**Search engines** are blocked by `robots.txt` on the preview host. A public site can let them in:
 "Allow search engines" in its access dialog, `--index` in the CLI (`--no-index` to stop), or
-`indexable` in MCP. Access other than public turns it off. Deployment URLs (`/u/<id>/`) stay
-blocked, because they change on each upload. A `/sitemap.xml` in the site is listed in `robots.txt`.
+`indexable` in MCP. Access other than public turns it off. A `/sitemap.xml` in the site is listed
+in `robots.txt`.
 
 ## MCP (Claude Code, Claude Desktop)
 
@@ -89,7 +90,7 @@ zup is one Docker container that serves two hosts:
 | Variable | Example | Serves |
 | --- | --- | --- |
 | `APP_URL` | `https://zup.example.com` | Dashboard, API, CLI login, MCP, `install.sh` |
-| `PREVIEW_URL` | `https://preview.example.com` | Uploaded sites: `/u/<id>/` and `/<alias>/` |
+| `PREVIEW_URL` | `https://preview.example.com` | Uploaded sites at `/<slug>/` |
 
 You need:
 
@@ -132,7 +133,7 @@ or **Docker Compose** build pack and the same settings.
 | `BETTER_AUTH_SECRET` | required | 32+ random characters |
 | `DATA_DIR` | `/data` (Docker) | Database and files |
 | `MAX_FILE_BYTES` | 1 GiB | Per file |
-| `MAX_DEPLOYMENT_BYTES` | 4 GiB | Per upload |
+| `MAX_DEPLOYMENT_BYTES` | 4 GiB | Per site |
 | `MAX_FILES` | 10000 | Per upload |
 | `MCP_MAX_BODY_BYTES` | 64 MiB | Per MCP request |
 | `CLIENT_IP_HEADER` | `x-forwarded-for` | Client IP header for rate limits. Empty: socket address |

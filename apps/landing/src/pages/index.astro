@@ -40,16 +40,15 @@ const steps = [
     title: "Publish",
     text: "Give zup one file or a whole folder. A folder with index.html becomes a website. Only new content is uploaded. You get a URL back.",
     lines: [
-      "$ zup ./dist --alias demo --public",
+      "$ zup ./dist --slug demo --public",
       "",
-      "✓ Published  https://preview.example.com/u/GsM0l7E2bH27oHv4/",
-      "  Alias      https://preview.example.com/demo/",
+      "✓ Published  https://preview.example.com/demo/",
       "  Access     public",
     ],
   },
   {
     title: "Add it to your agent",
-    text: "zup is an MCP server. Add it to Claude Code or Claude Desktop, log in once, and ask it to publish a page, make a share link or move an alias.",
+    text: "zup is an MCP server. Add it to Claude Code or Claude Desktop, log in once, and ask it to publish a page, update a site or make a share link.",
     lines: [
       "$ claude mcp add --transport http zup https://zup.example.com/mcp",
       "$ claude",
@@ -72,7 +71,7 @@ const features = [
   {
     icon: Tag,
     title: "Stable names",
-    text: "An alias like /report always opens the latest upload you point it to. Move it with one command.",
+    text: "Pick a slug like /report, or get a random one. Run zup ./dist --slug report --update and the same URL serves the new files.",
   },
   {
     icon: Clock,
@@ -124,7 +123,7 @@ const faq = [
   },
   {
     q: "Where is my data?",
-    a: "In one volume. A SQLite file holds accounts, sessions, deployments and aliases. A blobs folder holds file contents named by SHA-256. Back up that volume and you have everything.",
+    a: "In one volume. A SQLite file holds accounts, sessions and sites. A blobs folder holds file contents named by SHA-256. Back up that volume and you have everything.",
   },
   {
     q: "What does the CLI upload?",
@@ -136,7 +135,7 @@ const faq = [
   },
   {
     q: "How does it work with Claude?",
-    a: "zup exposes an MCP endpoint with OAuth login. Add it to Claude Code or Claude Desktop, approve it once, then ask Claude to publish pages, make share links or move aliases.",
+    a: "zup exposes an MCP endpoint with OAuth login. Add it to Claude Code or Claude Desktop, approve it once, then ask Claude to publish pages, update sites or make share links.",
   },
   {
     q: "Can I get my files out again?",
@@ -173,7 +172,7 @@ const faq = [
       lines={[
         "$ zup report.html --public",
         "",
-        "✓ Published  https://preview.example.com/u/LHh0yEuOtAzoftWv/",
+        "✓ Published  https://preview.example.com/k7m2px9qte4hwnac3vzr/",
         "  Access     public",
       ]}
     />
@@ -183,7 +182,7 @@ const faq = [
   <section class="reveal mx-auto max-w-5xl px-6 pb-24">
     <Shot
       name="sites"
-      alt="The zup dashboard listing three sites with their access level, alias, size and expiry"
+      alt="The zup dashboard listing three sites with their access level, size and expiry"
       width={1280}
       height={469}
     />
@@ -261,8 +260,8 @@ const faq = [
       <div class="reveal">
         <h2 class="text-3xl font-semibold tracking-tight">You decide who can open it</h2>
         <p class="mt-4 max-w-[680px] text-muted">
-          Each upload and each alias has its own access level. Change it at any time from the CLI
-          or the dashboard.
+          Each site has one URL and one access level. Change it at any time from the CLI or the
+          dashboard.
         </p>
       </div>
       <ul class="mt-12 grid gap-4 sm:grid-cols-3">
@@ -281,7 +280,7 @@ const faq = [
       <div class="reveal mt-12">
         <Shot
           name="site"
-          alt="A site page in the zup dashboard with its URL, password access, share link, details, alias and files"
+          alt="A site page in the zup dashboard with its URL, password access, share link, details and files"
           width={1280}
           height={683}
         />
