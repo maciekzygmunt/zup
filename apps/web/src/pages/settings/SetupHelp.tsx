@@ -58,7 +58,7 @@ export function SetupHelp() {
             label="Limits"
             value={
               info &&
-              `${formatBytes(info.limits.maxFileBytes)} per file · ${formatBytes(info.limits.maxDeploymentBytes)} per site · ${info.limits.maxFiles.toLocaleString()} files`
+              `${formatBytes(info.limits.maxFileBytes)} per file · ${formatBytes(info.limits.maxSiteBytes)} per site · ${info.limits.maxFiles.toLocaleString()} files`
             }
           />
         </Card>

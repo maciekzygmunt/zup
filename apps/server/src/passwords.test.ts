@@ -11,7 +11,7 @@ import {
 } from "./passwords.ts"
 
 const secret = "test-secret-that-is-long-enough-1234567890"
-const scope = siteScope({ alias: "report" })
+const scope = siteScope("site-a")
 
 test("passwords verify only against their own hash", async () => {
   const hash = await hashPassword("correct horse")
@@ -25,7 +25,7 @@ test("grants open one site, for one password, until they expire", async () => {
   const now = Date.now()
   const grant = unlockGrant(scope, hash, now)
   expect(grantOpens(grant, scope, hash, now)).toBe(true)
-  expect(grantOpens(grant, siteScope({ alias: "other" }), hash, now)).toBe(false)
+  expect(grantOpens(grant, siteScope("site-b"), hash, now)).toBe(false)
   expect(grantOpens(grant, scope, await hashPassword("correct horse"), now)).toBe(false)
   expect(grantOpens(grant, scope, hash, now + unlockMaxAgeSeconds * 1000 + 1000)).toBe(false)
   expect(grantOpens(false, scope, hash)).toBe(false)
@@ -35,6 +35,6 @@ test("share tokens stop working when the password changes", async () => {
   const hash = await hashPassword("correct horse")
   const token = shareToken(secret, scope, hash)
   expect(shareTokenOpens(token, secret, scope, hash)).toBe(true)
-  expect(shareTokenOpens(token, secret, siteScope({ alias: "other" }), hash)).toBe(false)
+  expect(shareTokenOpens(token, secret, siteScope("site-b"), hash)).toBe(false)
   expect(shareTokenOpens(token, secret, scope, await hashPassword("new key 123"))).toBe(false)
 })

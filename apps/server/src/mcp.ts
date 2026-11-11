@@ -3,12 +3,12 @@ import { createMcpHandler, McpServer } from "@modelcontextprotocol/server"
 import {
   type AccessInput,
   accessTypes,
-  aliasNameSchema,
   contentTypeFor,
-  createDeploymentSchema,
+  createSiteSchema,
   generateKey,
   isTextContentType,
   parseExpiry,
+  slugSchema,
   toManifestPath,
 } from "@zup/shared"
 import { z } from "zod"
@@ -33,8 +33,10 @@ const expiryField = z
 const indexableField = z
   .boolean()
   .describe(
-    "Let search engines crawl the alias. Only for public aliases. Omitted keeps the current value (off for a new alias).",
+    "Let search engines crawl the site. Only for public sites. Omitted keeps the current value (off for a new site).",
   )
+
+const slugField = slugSchema.describe("The site's name in its URL: <preview-url>/<slug>/")
 
 const text = (value: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
@@ -71,9 +73,9 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
           title: "Publish files",
           description:
             "Publish files (an HTML page, a static website, Markdown, images, any static file) and get a URL. " +
-            "With an alias, the site and the alias share one password. " +
             "Paths are relative, e.g. index.html or assets/app.js. A single HTML or Markdown file is served at the root. " +
-            "Use base64 encoding for binary files. Sites are private unless access says otherwise.",
+            "Use base64 encoding for binary files. " +
+            "A slug that is in use fails unless update is true; update replaces all files of that site and deletes the old ones.",
           inputSchema: z.object({
             files: z
               .array(
@@ -86,13 +88,15 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
               )
               .min(1)
               .max(2000),
+            slug: slugField.optional().describe("URL name. Omitted: a random one."),
+            update: z
+              .boolean()
+              .default(false)
+              .describe("Replace the files of the existing site at slug. Needs slug."),
             title: z.string().max(200).optional(),
-            access: accessField.default("private"),
-            alias: aliasNameSchema
+            access: accessField
               .optional()
-              .describe(
-                "Stable name: the site is also served at <preview-url>/<alias>/. Moves the alias if it exists.",
-              ),
+              .describe("Omitted: private for a new site, unchanged on update."),
             indexable: indexableField.optional(),
             entrypoint: z
               .string()
@@ -107,13 +111,6 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         },
         (input) =>
           run(async () => {
-            // Checked before upload, so a bad request leaves no deployment behind.
-            if (input.indexable !== undefined && !input.alias) {
-              throw new HttpError(400, "invalid_request", "indexable needs an alias")
-            }
-            if (input.indexable && input.access !== "public") {
-              throw new HttpError(422, "not_public", "Only public aliases can allow search engines")
-            }
             const uploads = input.files.map((file) => {
               const bytes =
                 file.encoding === "base64"
@@ -125,13 +122,15 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
               return { bytes, file: { path, hash, size: bytes.byteLength, contentType } }
             })
             // Same checks as the REST API: paths and content types come from the model.
-            const access = toAccess(input.access)
-            const deploymentInput = createDeploymentSchema.parse({
+            const siteInput = createSiteSchema.parse({
+              slug: input.slug,
+              update: input.update,
               title: input.title,
               files: uploads.map((upload) => upload.file),
               entrypoint: input.entrypoint ? toManifestPath(input.entrypoint) : undefined,
               spa: input.spa,
-              access,
+              access: input.access && toAccess(input.access),
+              indexable: input.indexable,
               expiresAt: input.expires ? parseExpiry(input.expires).toISOString() : undefined,
               source: "mcp",
             })
@@ -140,27 +139,16 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
                 await blobs.write(file.hash, new Blob([bytes]).stream(), config.MAX_FILE_BYTES)
               }
             }
-            const { deployment, key } = await sites.createDeployment(deploymentInput)
-            const alias = input.alias
-              ? await sites.putAlias(input.alias, {
-                  deploymentId: deployment.id,
-                  access,
-                  indexable: input.indexable,
-                  mode: "upsert",
-                })
-              : undefined
+            const { site, key, created } = await sites.createSite(siteInput)
             return {
-              url: deployment.url,
-              id: deployment.id,
-              access: deployment.access,
+              url: site.url,
+              slug: site.slug,
+              replaced: !created,
+              access: site.access,
+              indexable: site.indexable,
               password: key?.key,
               shareUrl: key?.shareUrl,
-              alias: alias && {
-                url: alias.alias.url,
-                shareUrl: alias.key?.shareUrl,
-                indexable: alias.alias.indexable,
-              },
-              expiresAt: deployment.expiresAt,
+              expiresAt: site.expiresAt,
             }
           }),
       )
@@ -170,38 +158,38 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         {
           title: "List sites",
           description:
-            "List published sites, newest first. Optionally search by title, id or alias.",
+            "List published sites, last changed first. Optionally search by title or slug.",
           inputSchema: z.object({
             query: z.string().optional(),
             limit: z.number().int().min(1).max(200).default(30),
           }),
           annotations: { readOnlyHint: true },
         },
-        ({ query, limit }) => run(() => sites.listDeployments({ query, limit, offset: 0 })),
+        ({ query, limit }) => run(() => sites.listSites({ query, limit, offset: 0 })),
       )
 
       server.registerTool(
         "get_site",
         {
           title: "Get site",
-          description: "Details and the file list of one deployment.",
-          inputSchema: z.object({ id: z.string() }),
+          description: "Details and the file list of one site.",
+          inputSchema: z.object({ slug: slugField }),
           annotations: { readOnlyHint: true },
         },
-        ({ id }) => run(() => sites.getDeployment(id)),
+        ({ slug }) => run(() => sites.getSite(slug)),
       )
 
       server.registerTool(
         "read_site_file",
         {
           title: "Read a file",
-          description: "Read one text file of a deployment (up to 1 MiB).",
-          inputSchema: z.object({ id: z.string(), path: z.string() }),
+          description: "Read one text file of a site (up to 1 MiB).",
+          inputSchema: z.object({ slug: slugField, path: z.string() }),
           annotations: { readOnlyHint: true },
         },
-        ({ id, path }) =>
+        ({ slug, path }) =>
           run(async () => {
-            const detail = await sites.getDeployment(id)
+            const detail = await sites.getSite(slug)
             const file = detail.files.find((f) => f.path === toManifestPath(path))
             if (!file) throw new HttpError(404, "file_not_found", `No file ${path}`)
             if (!isTextContentType(file.contentType) || file.size > 1024 * 1024) {
@@ -216,19 +204,25 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         {
           title: "Update site",
           description:
-            "Change title, access or expiry of a deployment. Setting access to password generates a new password.",
+            "Change the slug, title, access, search engine access or expiry of a site. " +
+            "A new slug changes the URL and the old URL stops working. " +
+            "Setting access to password generates a new password. Access other than public turns indexable off.",
           inputSchema: z.object({
-            id: z.string(),
+            slug: slugField,
+            newSlug: slugField.optional(),
             title: z.string().max(200).optional(),
             access: accessField.optional(),
+            indexable: indexableField.optional(),
             expires: expiryField.or(z.literal("never")).optional(),
           }),
         },
-        ({ id, title, access, expires }) =>
+        ({ slug, newSlug, title, access, indexable, expires }) =>
           run(() =>
-            sites.updateDeployment(id, {
+            sites.updateSite(slug, {
+              slug: newSlug,
               title,
               access: access && toAccess(access),
+              indexable,
               expiresAt:
                 expires === undefined
                   ? undefined
@@ -243,64 +237,14 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         "delete_site",
         {
           title: "Delete site",
-          description: "Delete a deployment and every alias that points to it.",
-          inputSchema: z.object({ id: z.string() }),
+          description: "Delete a site and its files.",
+          inputSchema: z.object({ slug: slugField }),
           annotations: { destructiveHint: true },
         },
-        ({ id }) =>
+        ({ slug }) =>
           run(async () => {
-            await sites.deleteDeployment(id)
-            return { deleted: id }
-          }),
-      )
-
-      server.registerTool(
-        "list_aliases",
-        {
-          title: "List aliases",
-          description: "List stable alias names and the deployments they point to.",
-          inputSchema: z.object({}),
-          annotations: { readOnlyHint: true },
-        },
-        () => run(() => sites.listAliases()),
-      )
-
-      server.registerTool(
-        "set_alias",
-        {
-          title: "Set alias",
-          description:
-            "Point an alias at a deployment (creates or moves it). Without access, a moved alias keeps its access and password. Access other than public turns indexable off. The deployment it leaves expires in 7 days unless another alias points to it.",
-          inputSchema: z.object({
-            name: aliasNameSchema,
-            deploymentId: z.string(),
-            access: accessField.optional(),
-            indexable: indexableField.optional(),
-          }),
-        },
-        ({ name, deploymentId, access, indexable }) =>
-          run(() =>
-            sites.putAlias(name, {
-              deploymentId,
-              access: access && toAccess(access),
-              indexable,
-              mode: "upsert",
-            }),
-          ),
-      )
-
-      server.registerTool(
-        "delete_alias",
-        {
-          title: "Delete alias",
-          description: "Delete an alias. The deployment stays.",
-          inputSchema: z.object({ name: aliasNameSchema }),
-          annotations: { destructiveHint: true },
-        },
-        ({ name }) =>
-          run(async () => {
-            await sites.deleteAlias(name)
-            return { deleted: name }
+            await sites.deleteSite(slug)
+            return { deleted: slug }
           }),
       )
 
@@ -309,19 +253,11 @@ export function createMcpEndpoint({ config, auth, blobs, sites }: Deps) {
         {
           title: "Get share link",
           description:
-            "Get a link that opens a password-protected deployment or alias without typing the password.",
-          inputSchema: z.object({
-            deploymentId: z.string().optional(),
-            alias: aliasNameSchema.optional(),
-          }),
+            "Get a link that opens a password-protected site without typing the password.",
+          inputSchema: z.object({ slug: slugField }),
           annotations: { readOnlyHint: true },
         },
-        ({ deploymentId, alias }) =>
-          run(() => {
-            if (alias) return sites.shareLink({ alias })
-            if (deploymentId) return sites.shareLink({ deploymentId })
-            throw new HttpError(400, "invalid_request", "Pass deploymentId or alias")
-          }),
+        ({ slug }) => run(() => sites.shareLink(slug)),
       )
 
       return server

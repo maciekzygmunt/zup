@@ -1,57 +1,43 @@
 import { accessTypes } from "@zup/shared"
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
-export const deployments = sqliteTable("deployments", {
+// One published site: one URL, one access setting, one set of files.
+export const sites = sqliteTable("sites", {
+  // Internal and fixed. Clients use the slug, which can change.
   id: text().primaryKey(),
+  slug: text().notNull().unique(),
   title: text(),
   // Null means "/" shows a directory listing.
   entrypoint: text(),
   spa: integer({ mode: "boolean" }).notNull(),
   access: text({ enum: accessTypes }).notNull(),
   passwordHash: text("password_hash"),
+  // Search engines may crawl it. Only applies while access is public.
+  indexable: integer({ mode: "boolean" }).notNull().default(false),
   fileCount: integer("file_count").notNull(),
   totalBytes: integer("total_bytes").notNull(),
   source: text({ enum: ["cli", "web", "mcp"] }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
-  // The expiry was set because an alias moved away. An alias pointing here again clears it.
-  autoExpiry: integer("auto_expiry", { mode: "boolean" }).notNull().default(false),
 })
 
-export const deploymentFiles = sqliteTable(
-  "deployment_files",
+export const siteFiles = sqliteTable(
+  "site_files",
   {
-    deploymentId: text("deployment_id")
+    siteId: text("site_id")
       .notNull()
-      .references(() => deployments.id, { onDelete: "cascade" }),
+      .references(() => sites.id, { onDelete: "cascade" }),
     path: text().notNull(),
     hash: text().notNull(),
     size: integer().notNull(),
     contentType: text("content_type").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.deploymentId, table.path] }),
-    index("deployment_files_hash").on(table.hash),
+    primaryKey({ columns: [table.siteId, table.path] }),
+    index("site_files_hash").on(table.hash),
   ],
 )
 
-export const aliases = sqliteTable(
-  "aliases",
-  {
-    name: text().primaryKey(),
-    deploymentId: text("deployment_id")
-      .notNull()
-      .references(() => deployments.id, { onDelete: "cascade" }),
-    access: text({ enum: accessTypes }).notNull(),
-    passwordHash: text("password_hash"),
-    // Search engines may crawl it. Only applies while access is public.
-    indexable: integer({ mode: "boolean" }).notNull().default(false),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-  },
-  (table) => [index("aliases_deployment").on(table.deploymentId)],
-)
-
-export type Deployment = typeof deployments.$inferSelect
-export type DeploymentFile = typeof deploymentFiles.$inferSelect
-export type Alias = typeof aliases.$inferSelect
+export type Site = typeof sites.$inferSelect
+export type SiteFile = typeof siteFiles.$inferSelect

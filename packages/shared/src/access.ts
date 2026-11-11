@@ -28,8 +28,8 @@ export function generateKey(): string {
   return key.match(/.{5}/g)!.join("-")
 }
 
-// Top-level preview paths that can never be alias names.
-export const reservedAliasNames = new Set([
+// Top-level preview paths that can never be slugs. "u" keeps old /u/<id>/ links a clean 404.
+export const reservedSlugs = new Set([
   "u",
   "_zup",
   "api",
@@ -39,9 +39,10 @@ export const reservedAliasNames = new Set([
   "well-known",
 ])
 
-export const aliasNameSchema = z
+// The name of a site in its URL: <preview-url>/<slug>/.
+export const slugSchema = z
   .string()
   .regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, {
     message: "Use 1-63 lowercase letters, digits or dashes, not starting or ending with a dash",
   })
-  .refine((name) => !reservedAliasNames.has(name), { message: "This alias name is reserved" })
+  .refine((slug) => !reservedSlugs.has(slug), { message: "This slug is reserved" })

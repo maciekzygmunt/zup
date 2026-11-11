@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { aliasNameSchema, generateKey } from "./access.ts"
+import { generateKey, slugSchema } from "./access.ts"
 import { parseExpiry } from "./duration.ts"
 import { inferEntrypoint, isValidManifestPath, toManifestPath } from "./paths.ts"
 
@@ -35,10 +35,10 @@ test("parseExpiry reads durations and dates", () => {
   expect(() => parseExpiry("2020-01-01", now)).toThrow()
 })
 
-test("alias names are slugs and not reserved", () => {
-  expect(aliasNameSchema.safeParse("weekly-report").success).toBe(true)
+test("slugs are lowercase URL names and not reserved", () => {
+  expect(slugSchema.safeParse("weekly-report").success).toBe(true)
   for (const bad of ["Weekly", "-x", "x-", "u", "_zup", "a b"]) {
-    expect(aliasNameSchema.safeParse(bad).success).toBe(false)
+    expect(slugSchema.safeParse(bad).success).toBe(false)
   }
 })
 

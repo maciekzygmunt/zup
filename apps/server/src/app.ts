@@ -103,7 +103,7 @@ export async function createServer(config: Config) {
     }),
   )
 
-  app.route("/api", createApiRoutes({ config, db, sqlite, auth, blobs, sites }))
+  app.route("/api", createApiRoutes({ config, sqlite, auth, blobs, sites }))
   app.all("/api/*", (c) => c.json({ error: "not_found", message: "No such endpoint" }, 404))
 
   app.onError((error, c) => {
@@ -149,7 +149,7 @@ export async function createServer(config: Config) {
 
   const preview = createPreviewApp({ config, db, blobs, owners })
 
-  // Background cleanup: expired deployments, then content no deployment uses.
+  // Background cleanup: expired sites, then content no site uses.
   async function cleanup() {
     try {
       const expired = await sites.purgeExpired()

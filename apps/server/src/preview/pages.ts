@@ -68,7 +68,7 @@ const markdownCss = `
 .markdown img { max-width: 100%; } .markdown hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
 `
 
-// `indexable` drops the noindex tag. Only for site content of an indexable alias.
+// `indexable` drops the noindex tag. Only for content of an indexable site.
 type PageOptions = {
   title: string
   body: string

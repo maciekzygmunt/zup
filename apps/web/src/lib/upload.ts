@@ -81,7 +81,7 @@ export function checkLimits(files: PickedFile[], limits: ServerInfo["limits"]): 
   const big = files.find((f) => f.file.size > limits.maxFileBytes)
   if (big) return `${big.path} is larger than the per-file limit.`
   const total = files.reduce((sum, f) => sum + f.file.size, 0)
-  if (total > limits.maxDeploymentBytes) return "These files are larger than the per-site limit."
+  if (total > limits.maxSiteBytes) return "These files are larger than the per-site limit."
   return null
 }
 

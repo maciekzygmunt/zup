@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { CreateSiteInput } from "@zup/shared"
+import { createSiteSchema } from "@zup/shared"
 import { createServer } from "./app.ts"
 import { createBlobStore } from "./blobs.ts"
 import { loadConfig } from "./config.ts"
@@ -16,22 +18,22 @@ const config = loadConfig({
 let server: Awaited<ReturnType<typeof createServer>>
 const blobs = createBlobStore(config.dataDir)
 
-async function publish(expiresAt?: string) {
-  const content = "<h1>site</h1>"
+async function publish(content: string, input: Omit<CreateSiteInput, "files"> = {}) {
   const hash = new Bun.CryptoHasher("sha256").update(content).digest("hex")
   await blobs.write(hash, new Blob([content]).stream(), 1e6)
-  const { deployment } = await server.sites.createDeployment({
-    files: [{ path: "/index.html", hash, size: content.length, contentType: "text/html" }],
-    access: { type: "public" },
-    expiresAt,
-    source: "cli",
-  })
-  return deployment.id
+  return server.sites.createSite(
+    createSiteSchema.parse({
+      files: [{ path: "/index.html", hash, size: content.length, contentType: "text/html" }],
+      ...input,
+    }),
+  )
 }
 
-const move = (name: string, deploymentId: string) =>
-  server.sites.putAlias(name, { deploymentId, mode: "upsert" })
-const expiryOf = async (id: string) => (await server.sites.getDeployment(id)).expiresAt
+const errorOf = (promise: Promise<unknown>) =>
+  promise.then(
+    () => null,
+    (error: { code?: string }) => error.code,
+  )
 
 beforeAll(async () => {
   server = await createServer(config)
@@ -41,81 +43,77 @@ afterAll(() => {
   rmSync(dataDir, { recursive: true, force: true })
 })
 
-describe("moving an alias", () => {
-  test("expires the replaced deployment, and moving back cancels it", async () => {
-    const v1 = await publish()
-    const v2 = await publish()
-    await move("demo", v1)
-
-    const { previous } = await move("demo", v2)
-    expect(previous?.id).toBe(v1)
-    const days = (Date.parse(previous!.expiresAt!) - Date.now()) / 86_400_000
-    expect(days).toBeCloseTo(7, 1)
-
-    await move("demo", v1)
-    expect(await expiryOf(v1)).toBeNull()
-    expect(await expiryOf(v2)).not.toBeNull()
+describe("slugs", () => {
+  test("a site without a slug gets a random one", async () => {
+    const { site } = await publish("random")
+    expect(site.slug).toMatch(/^[a-z0-9]{20}$/)
+    expect(site.url).toBe(`http://127.0.0.1:4100/${site.slug}/`)
   })
 
-  test("keeps a deployment that has another alias or its own expiry", async () => {
-    const expiresAt = new Date(Date.now() + 86_400_000).toISOString()
-    const shared = await publish()
-    const temporary = await publish(expiresAt)
-    const next = await publish()
-    await move("a", shared)
-    await move("b", shared)
-    await move("c", temporary)
+  test("a slug in use fails unless update is set", async () => {
+    await publish("v1", { slug: "taken" })
+    expect(await errorOf(publish("v2", { slug: "taken" }))).toBe("slug_taken")
+    expect((await server.sites.getSite("taken")).files).toHaveLength(1)
+  })
 
-    expect((await move("a", next)).previous?.expiresAt).toBeNull()
-    expect((await move("c", next)).previous?.expiresAt).toBe(expiresAt)
-    // An alias pointing back does not cancel an expiry the user chose.
-    await move("c", temporary)
-    expect(await expiryOf(temporary)).toBe(expiresAt)
+  test("update replaces the files and keeps the other settings", async () => {
+    const first = await publish("v1", {
+      slug: "report",
+      title: "Report",
+      access: { type: "password", password: "report key" },
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+    })
+    const share = await server.sites.shareLink("report")
+
+    const second = await publish("version two", { slug: "report", update: true })
+    expect(second.created).toBe(false)
+    expect(second.key).toBeUndefined()
+    expect(second.site).toMatchObject({
+      title: "Report",
+      access: "password",
+      expiresAt: first.site.expiresAt,
+      createdAt: first.site.createdAt,
+    })
+    const detail = await server.sites.getSite("report")
+    expect(detail.files).toEqual([expect.objectContaining({ size: "version two".length })])
+    expect((await server.sites.shareLink("report")).shareUrl).toBe(share.shareUrl)
+  })
+
+  test("update creates the site when the slug is free", async () => {
+    const { created, site } = await publish("new", { slug: "fresh", update: true })
+    expect(created).toBe(true)
+    expect(site.access).toBe("private")
+  })
+
+  test("a slug change moves the site and fails on a used slug", async () => {
+    await publish("a", { slug: "old-name" })
+    await publish("b", { slug: "other" })
+    expect(await errorOf(server.sites.updateSite("old-name", { slug: "other" }))).toBe("slug_taken")
+    const { site } = await server.sites.updateSite("old-name", { slug: "new-name" })
+    expect(site.url).toBe("http://127.0.0.1:4100/new-name/")
+    expect(await errorOf(server.sites.getSite("old-name"))).toBe("site_not_found")
   })
 })
 
-describe("indexable aliases", () => {
-  const errorOf = (promise: Promise<unknown>) =>
-    promise.then(
-      () => null,
-      (error: { code?: string }) => error.code,
+describe("search engines", () => {
+  test("are off by default and only allowed on public sites", async () => {
+    const { site } = await publish("plain", { slug: "plain" })
+    expect(site.indexable).toBe(false)
+    expect(await errorOf(server.sites.updateSite("plain", { indexable: true }))).toBe("not_public")
+    expect(await errorOf(publish("x", { access: { type: "password" }, indexable: true }))).toBe(
+      "not_public",
     )
-
-  test("is off by default and only allowed on public aliases", async () => {
-    const id = await publish()
-    const created = await move("plain", id)
-    expect(created.alias.indexable).toBe(false)
-    expect(created.alias.access).toBe("private")
-    expect(await errorOf(server.sites.updateAlias("plain", { indexable: true }))).toBe("not_public")
-    expect(
-      await errorOf(
-        server.sites.putAlias("hidden", {
-          deploymentId: id,
-          access: { type: "password" },
-          indexable: true,
-          mode: "create",
-        }),
-      ),
-    ).toBe("not_public")
   })
 
-  test("can change without new access, and keeps the access and password", async () => {
-    const id = await publish()
-    await server.sites.putAlias("open", {
-      deploymentId: id,
-      access: { type: "public" },
-      mode: "create",
-    })
-    const on = await server.sites.updateAlias("open", { indexable: true })
-    expect(on.alias).toMatchObject({ access: "public", indexable: true })
+  test("can change without new access, and an update keeps the setting", async () => {
+    await publish("open", { slug: "open", access: { type: "public" } })
+    const on = await server.sites.updateSite("open", { indexable: true })
+    expect(on.site).toMatchObject({ access: "public", indexable: true })
     expect(on.key).toBeUndefined()
-    const off = await server.sites.updateAlias("open", { indexable: false })
-    expect(off.alias).toMatchObject({ access: "public", indexable: false })
-
-    await server.sites.updateAlias("open", { access: { type: "password", password: "secret key" } })
-    const before = await server.sites.shareLink({ alias: "open" })
-    const kept = await server.sites.updateAlias("open", { indexable: false })
-    expect(kept.alias.access).toBe("password")
-    expect((await server.sites.shareLink({ alias: "open" })).shareUrl).toBe(before.shareUrl)
+    expect((await publish("open v2", { slug: "open", update: true })).site.indexable).toBe(true)
+    // Access other than public turns it off, and public again does not turn it back on.
+    await server.sites.updateSite("open", { access: { type: "private" } })
+    const { site } = await server.sites.updateSite("open", { access: { type: "public" } })
+    expect(site.indexable).toBe(false)
   })
 })
