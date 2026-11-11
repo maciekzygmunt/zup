@@ -159,7 +159,7 @@ export function createSiteService({
       const row: Site = {
         id: existing?.id ?? siteId(),
         slug,
-        title: input.title || existing?.title || null,
+        title: input.title === undefined ? (existing?.title ?? null) : input.title || null,
         entrypoint,
         spa: input.spa ?? existing?.spa ?? (entrypoint !== null && isHtmlPath(entrypoint)),
         access,
