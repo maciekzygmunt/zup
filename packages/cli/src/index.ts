@@ -6,16 +6,15 @@ import { session } from "./api.ts"
 import { deploy } from "./commands/deploy.ts"
 import { login, logout, whoami } from "./commands/login.ts"
 import {
-  alias,
   expire,
   list,
   open,
   remove,
   rename as renameSite,
   setAccess,
+  setSlug,
   share,
   show,
-  unalias,
 } from "./commands/manage.ts"
 import { pull } from "./commands/pull.ts"
 import { bold, CliError, dim, green, info, red } from "./ui.ts"
@@ -30,21 +29,20 @@ ${bold("Usage")}
   zup logout                      Log out and end the session
   zup whoami                      Show the logged-in account
 
-  zup ls [search]                 List deployments (--access, --limit, --json)
+  zup ls [search]                 List sites (--access, --limit, --json)
   zup info <site>                 Show details and files
   zup open <site>                 Open in the browser
-  zup alias <site> <name>         Point an alias at a deployment (--update to move)
-  zup unalias <name>              Delete an alias
-  zup access <site> <flag>        Change access: --public, --private, --protect, --password
-                                  For an alias also --index, --no-index
+  zup slug <site> <new-slug>      Change the slug, and with it the URL
+  zup access <site> <flag>        Change access: --public, --private, --protect, --password,
+                                  --index, --no-index
   zup expire <site> <when|never>  Set or clear expiry (30m, 12h, 7d, 2w or a date)
   zup rename <site> <title>       Change the title
   zup share <site>                Print a share link for a password-protected site
-  zup rm <site...>                Delete deployments or aliases (-y to skip the prompt)
+  zup rm <site...>                Delete sites (-y to skip the prompt)
   zup pull <site> [dir]           Download the files (--force, --dry-run)
   zup upgrade                     Install the latest CLI from your server
 
-  <site> is a deployment id, an alias, or a site URL.
+  <site> is a slug or a site URL.
 
 ${bold("Publish options")}
   -t, --title <text>       Title shown in the dashboard (default: folder or file name)
@@ -52,10 +50,10 @@ ${bold("Publish options")}
       --public             Anyone with the URL can open it
       --protect            Anyone with a generated password can open it
       --password <key>     Same, with your own password (8+ characters)
-  -a, --alias <name>       Also serve it at <sites-url>/<name>/
-  -u, --update             Move the alias if it already exists (old deployment expires in 7d)
-      --index              Let search engines crawl the alias (needs --public)
-      --no-index           Stop search engines from crawling the alias
+  -s, --slug <name>        Serve it at <sites-url>/<name>/ (default: a random slug)
+  -u, --update             Replace the files of the site at --slug. The old files are deleted
+      --index              Let search engines crawl the site (needs --public)
+      --no-index           Stop search engines from crawling the site
   -e, --expires <when>     Delete after 30m, 12h, 7d, 2w or at a date
       --entrypoint <file>  File served at the root
       --no-spa             No fallback to the entrypoint for unknown paths
@@ -83,8 +81,7 @@ const commands = new Set([
   "list",
   "info",
   "open",
-  "alias",
-  "unalias",
+  "slug",
   "access",
   "expire",
   "rename",
@@ -118,7 +115,7 @@ async function main(argv: string[]) {
     allowPositionals: true,
     options: {
       title: { type: "string", short: "t" },
-      alias: { type: "string", short: "a" },
+      slug: { type: "string", short: "s" },
       update: { type: "boolean", short: "u" },
       expires: { type: "string", short: "e" },
       entrypoint: { type: "string" },
@@ -173,12 +170,9 @@ async function main(argv: string[]) {
     case "open":
       need(1, "open <site>")
       return open(args[0]!, flags)
-    case "alias":
-      need(2, "alias <site> <name>")
-      return alias(args[0]!, args[1]!, flags)
-    case "unalias":
-      need(1, "unalias <name>")
-      return unalias(args[0]!, flags)
+    case "slug":
+      need(2, "slug <site> <new-slug>")
+      return setSlug(args[0]!, args[1]!, flags)
     case "access":
       need(1, "access <site> --public|--private|--protect|--password <key>|--index|--no-index")
       return setAccess(args[0]!, flags)

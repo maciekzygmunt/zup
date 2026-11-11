@@ -1,10 +1,4 @@
-import {
-  type AccessInput,
-  formatBytes,
-  inferEntrypoint,
-  parseExpiry,
-  toManifestPath,
-} from "@zup/shared"
+import { formatBytes, inferEntrypoint, parseExpiry, slugSchema, toManifestPath } from "@zup/shared"
 import {
   type AccessFlags,
   accessFromFlags,
@@ -18,11 +12,9 @@ import {
   bold,
   browserUrl,
   CliError,
-  confirm,
   dim,
   green,
   info,
-  interactive,
   openInBrowser,
   relativeTime,
   rows,
@@ -33,7 +25,7 @@ import { uploadMissing } from "../upload.ts"
 export type DeployFlags = AccessFlags &
   IndexFlags & {
     title?: string
-    alias?: string
+    slug?: string
     update?: boolean
     expires?: string
     entrypoint?: string
@@ -45,14 +37,25 @@ export type DeployFlags = AccessFlags &
     server?: string
   }
 
+const slugInUse = (slug: string) =>
+  new CliError(
+    `Slug ${slug} is in use. To replace its files, pass --update.\n` +
+      `  To keep them, first move the old site: zup slug ${slug} <new-slug>`,
+  )
+
 export async function deploy(inputs: string[], flags: DeployFlags) {
   const access = accessFromFlags(flags)
   const indexable = indexableFromFlags(flags)
-  if (indexable !== undefined && !flags.alias) {
-    throw new CliError("--index and --no-index need --alias")
+  const { slug, update = false } = flags
+  if (slug !== undefined) {
+    const parsed = slugSchema.safeParse(slug)
+    if (!parsed.success) throw new CliError(`--slug: ${parsed.error.issues[0]?.message}`)
   }
-  // Checked before upload: the server refuses it for an alias that is not public.
-  if (indexable && access?.type !== "public") throw new CliError("--index needs --public")
+  if (update && !slug) throw new CliError("--update needs --slug")
+  // Checked before upload: the server refuses search engines for sites that are not public.
+  if (indexable && (access ? access.type !== "public" : !update)) {
+    throw new CliError("--index needs --public")
+  }
   const expiresAt = flags.expires ? parseExpiry(flags.expires).toISOString() : undefined
   const { files, name, skippedByGit } = await scan(inputs.length ? inputs : ["."])
   const entrypoint = flags.entrypoint ? toManifestPath(flags.entrypoint) : undefined
@@ -73,87 +76,54 @@ export async function deploy(inputs: string[], flags: DeployFlags) {
 
   const current = await session(flags.server)
   const api = client(current)
+  // Fails before the upload, so a used slug does not cost the upload time.
+  if (slug && !update && (await api.sites[":slug"].$get({ param: { slug } })).ok) {
+    throw slugInUse(slug)
+  }
   if (!flags.json) info(dim(`${files.length} file(s), ${formatBytes(totalBytes)}`))
   const uploaded = await uploadMissing(current, api, files)
   if (!flags.json && files.length > uploaded.count) {
     info(dim(`${files.length - uploaded.count} file(s) already on the server`))
   }
 
-  const { deployment, key } = await unwrap(
-    api.deployments.$post({
+  const { site, key, created } = await unwrap(
+    api.sites.$post({
       json: {
-        title: flags.title ?? name,
+        slug,
+        update,
+        // An update keeps the current title unless --title is given.
+        title: flags.title ?? (update ? undefined : name),
         files: files.map(({ absolutePath: _, ...file }) => file),
         entrypoint,
         spa: flags["no-spa"] ? false : flags.spa,
-        access: access ?? { type: "private" },
+        access,
+        indexable,
         expiresAt,
         source: "cli",
       },
     }),
   )
 
-  const alias = flags.alias ? await claimAlias(flags, deployment.id, access, indexable) : undefined
-
   if (flags.json) {
-    process.stdout.write(`${JSON.stringify({ deployment, key, alias }, null, 2)}\n`)
+    process.stdout.write(`${JSON.stringify({ site, key, created }, null, 2)}\n`)
     return
   }
 
-  const password = access?.type === "password" && !flags.password ? access.password : null
-  const shareUrl = (alias?.key ?? key)?.shareUrl
-  process.stdout.write(`\n${green("✓")} ${bold("Published")}  ${deployment.url}\n`)
+  process.stdout.write(`\n${green("✓")} ${bold(created ? "Published" : "Updated")}  ${site.url}\n`)
   rows([
-    ["Alias", alias?.alias.url],
-    ["Access", accessBadge(alias?.alias.access ?? deployment.access)],
-    ["Search engines", alias?.alias.indexable ? "allowed" : null],
-    ["Password", password],
-    ["Share link", shareUrl],
+    ["Access", accessBadge(site.access)],
+    ["Search engines", site.indexable ? "allowed" : null],
+    ["Password", flags.password ? null : key?.key],
+    ["Share link", key?.shareUrl],
     [
       "Expires",
-      deployment.expiresAt &&
-        `${relativeTime(deployment.expiresAt)} (${new Date(deployment.expiresAt).toLocaleString()})`,
+      site.expiresAt &&
+        `${relativeTime(site.expiresAt)} (${new Date(site.expiresAt).toLocaleString()})`,
     ],
   ])
-  if (alias && !alias.created && !access && alias.alias.access === "password") {
-    warn("The alias kept its existing password. Pass --protect or --password to change it.")
+  if (!created && !access && site.access === "password") {
+    warn("The site kept its password. Pass --protect or --password to change it.")
   }
-  if (alias?.previous?.expiresAt) {
-    const { id, expiresAt } = alias.previous
-    info(
-      dim(
-        `Previous deployment ${id} will be deleted ${relativeTime(expiresAt)}. \`zup expire ${id} never\` keeps it.`,
-      ),
-    )
-  }
-  if (shareUrl) info(dim("\nThe share link is shown only now. `zup share` makes a new one later."))
-  if (flags.open) {
-    const target = alias?.alias ?? deployment
-    openInBrowser(browserUrl(current.server, target.url, target.access))
-  }
-
-  async function claimAlias(
-    flags: DeployFlags,
-    deploymentId: string,
-    access?: AccessInput,
-    indexable?: boolean,
-  ) {
-    const name = flags.alias!
-    const put = (mode: "create" | "upsert") =>
-      api.aliases[":name"].$put({
-        param: { name },
-        json: { deploymentId, access, indexable, mode },
-      })
-    const created = await put("create")
-    if (created.status !== 409) return unwrap(created)
-    const move =
-      flags.update ||
-      (interactive &&
-        (await confirm(`Alias ${bold(name)} already exists. Move it to this deployment?`)))
-    if (!move) {
-      warn(`Alias ${name} was not changed. Pass --update to move it.`)
-      return undefined
-    }
-    return unwrap(put("upsert"))
-  }
+  if (key) info(dim("\nThe share link is shown only now. `zup share` makes a new one later."))
+  if (flags.open) openInBrowser(browserUrl(current.server, site.url, site.access))
 }
