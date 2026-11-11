@@ -10,7 +10,6 @@ import { UploadProvider } from "./upload/UploadProvider.tsx"
 
 const links = [
   { to: "/", label: "Sites", end: true },
-  { to: "/aliases", label: "Aliases", end: false },
   { to: "/settings", label: "Settings", end: false },
 ]
 

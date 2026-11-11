@@ -1,11 +1,10 @@
 import {
   type AccessInput,
-  type AliasSummary,
   contentTypeFor,
-  type DeploymentSummary,
   type GrantedKey,
   type ManifestFile,
   type ServerInfo,
+  type SiteSummary,
   toManifestPath,
 } from "@zup/shared"
 import { createSHA256 } from "hash-wasm"
@@ -17,20 +16,20 @@ export type UploadProgress =
   | { phase: "uploading"; done: number; total: number }
   | { phase: "publishing" }
 
+// A new site, or with `update` new files for the site at `slug` (other settings stay).
 export type UploadRequest = {
   files: PickedFile[]
-  title: string
-  access: AccessInput
-  alias?: { name: string; mode: "create" | "upsert" }
-  expiresAt: string | null
+  slug?: string
+  update?: boolean
+  title?: string
+  access?: AccessInput
+  expiresAt?: string
 }
 
 export type UploadResult = {
-  deployment: DeploymentSummary
+  site: SiteSummary
   key?: GrantedKey
-  alias?: AliasSummary
-  aliasKey?: GrantedKey
-  aliasError?: string
+  created: boolean
   skippedBytes: number
 }
 
@@ -130,38 +129,9 @@ export async function upload(
   })
 
   onProgress({ phase: "publishing" })
-  const created = await parseResponse(
-    api.deployments.$post({
-      json: {
-        title: request.title || undefined,
-        files: manifest,
-        access: request.access,
-        expiresAt: request.expiresAt ?? undefined,
-        source: "web",
-      },
-    }),
+  const { files: _, ...fields } = request
+  const result = await parseResponse(
+    api.sites.$post({ json: { ...fields, files: manifest, source: "web" } }),
   )
-  const result: UploadResult = {
-    deployment: created.deployment,
-    key: created.key,
-    skippedBytes: manifest.reduce((sum, f) => sum + f.size, 0) - missingBytes,
-  }
-  if (!request.alias) return result
-
-  // The alias gets the same access. With a password, both share the one password.
-  const access: AccessInput =
-    request.access.type === "password"
-      ? { type: "password", password: request.access.password ?? created.key?.key }
-      : request.access
-  try {
-    const aliased = await parseResponse(
-      api.aliases[":name"].$put({
-        param: { name: request.alias.name },
-        json: { deploymentId: created.deployment.id, access, mode: request.alias.mode },
-      }),
-    )
-    return { ...result, alias: aliased.alias, aliasKey: aliased.key }
-  } catch (error) {
-    return { ...result, aliasError: error instanceof Error ? error.message : "Alias failed" }
-  }
+  return { ...result, skippedBytes: manifest.reduce((sum, f) => sum + f.size, 0) - missingBytes }
 }

@@ -1,16 +1,9 @@
-import type { AccessType, DeploymentSummary } from "@zup/shared"
+import type { AccessType, SiteSummary } from "@zup/shared"
 import { accessTypes, formatBytes } from "@zup/shared"
 import { ChevronDown, Clock, FilePlus2, FolderUp, Search, Upload } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router"
-import {
-  AccessBadge,
-  AccessIcon,
-  accessInfo,
-  CrawlIcon,
-  CrawlTooltip,
-  isCrawlable,
-} from "../components/access.tsx"
+import { accessInfo, SiteAccessBadge } from "../components/access.tsx"
 import { CopyRow } from "../components/copy.tsx"
 import { Menu, MenuItem } from "../components/Menu.tsx"
 import { SiteMenu } from "../components/SiteMenu.tsx"
@@ -29,7 +22,7 @@ import { useUpload } from "../components/upload/UploadProvider.tsx"
 import { errorMessage } from "../lib/api.ts"
 import { fullDate, plural, timeAgo } from "../lib/format.ts"
 import { useDebounced } from "../lib/hooks.ts"
-import { useDeployments, useInfo } from "../lib/queries.ts"
+import { useInfo, useSites } from "../lib/queries.ts"
 
 const filters: { value: AccessType | undefined; label: string }[] = [
   { value: undefined, label: "All" },
@@ -45,8 +38,8 @@ export function SitesPage() {
   const access = isAccess(accessParam) ? accessParam : undefined
   const [query, setQuery] = useState(params.get("q") ?? "")
   const q = useDebounced(query.trim(), 250)
-  const list = useDeployments(q, access, { keepPrevious: true })
-  const deployments = list.data?.pages.flatMap((page) => page.deployments) ?? []
+  const list = useSites(q, access, { keepPrevious: true })
+  const sites = list.data?.pages.flatMap((page) => page.sites) ?? []
   // The old total would not match the new filter, so hide it while the new results load.
   const total = list.isPlaceholderData ? undefined : list.data?.pages[0]?.total
   const filtered = !!q || !!access
@@ -120,7 +113,7 @@ export function SitesPage() {
       {list.error && <ErrorNote>{errorMessage(list.error)}</ErrorNote>}
       {list.isPending ? (
         <Spinner className="mx-auto my-16" />
-      ) : deployments.length === 0 ? (
+      ) : sites.length === 0 ? (
         filtered ? (
           <p className="py-16 text-center text-[13px] text-muted">No sites match.</p>
         ) : (
@@ -133,8 +126,8 @@ export function SitesPage() {
             list.isPlaceholderData && "opacity-60",
           )}
         >
-          {deployments.map((deployment) => (
-            <SiteRow key={deployment.id} deployment={deployment} />
+          {sites.map((site) => (
+            <SiteRow key={site.slug} site={site} />
           ))}
         </Card>
       )}
@@ -175,7 +168,7 @@ function SearchBox({ value, onChange }: { value: string; onChange: (value: strin
         ref={ref}
         type="search"
         aria-label="Search sites"
-        placeholder="Search title, id or alias"
+        placeholder="Search title or slug"
         className={cx(inputClass, "pr-8 pl-8")}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -205,10 +198,10 @@ function UploadButton() {
         </button>
       }
     >
-      <MenuItem icon={FilePlus2} onClick={pickFiles}>
+      <MenuItem icon={FilePlus2} onClick={() => pickFiles()}>
         Files…
       </MenuItem>
-      <MenuItem icon={FolderUp} onClick={pickFolder}>
+      <MenuItem icon={FolderUp} onClick={() => pickFolder()}>
         Folder…
       </MenuItem>
       <p className="px-2 pt-1.5 pb-1 text-xs text-muted">Or drop files anywhere.</p>
@@ -216,55 +209,42 @@ function UploadButton() {
   )
 }
 
-function SiteRow({ deployment }: { deployment: DeploymentSummary }) {
-  const d = deployment
+function SiteRow({ site }: { site: SiteSummary }) {
   return (
     <div className="relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-subtle/60 sm:gap-4">
-      <div className="grid min-w-0 flex-1 gap-1.5 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)_8rem_7rem] md:items-center md:gap-4">
+      <div className="grid min-w-0 flex-1 gap-1.5 md:grid-cols-[minmax(0,1fr)_8rem_8rem_7rem] md:items-center md:gap-4">
         <div className="grid min-w-0">
           <Link
-            to={`/sites/${d.id}`}
+            to={`/sites/${site.slug}`}
             className="truncate font-medium after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-accent"
           >
-            {siteName(d)}
+            {siteName(site)}
           </Link>
-          <Mono className="truncate text-muted">{d.id}</Mono>
+          <Mono className="truncate text-muted">/{site.slug}</Mono>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <AccessBadge access={d.access} />
-          {d.aliases.map((alias) => (
-            // Above the row link so hovering the chip shows its tooltip.
-            <CrawlTooltip key={alias.name} crawlable={isCrawlable(alias)}>
-              <span
-                title={isCrawlable(alias) ? undefined : alias.url}
-                className="relative z-10 inline-flex h-5 max-w-40 items-center gap-1 rounded-full border border-line bg-card px-1.5 text-[11.5px]"
-              >
-                <AccessIcon access={alias.access} className="shrink-0 text-muted" />
-                <span className="truncate font-mono">/{alias.name}</span>
-                {isCrawlable(alias) && <CrawlIcon />}
-              </span>
-            </CrawlTooltip>
-          ))}
+        <div className="flex min-w-0 items-center">
+          {/* Above the row link so hovering the badge shows its tooltip. */}
+          <SiteAccessBadge site={site} />
         </div>
         <div className="flex gap-3 text-[12.5px] text-muted tabular-nums md:grid md:gap-0">
-          <span>{plural(d.fileCount, "file")}</span>
-          <span>{formatBytes(d.totalBytes)}</span>
+          <span>{plural(site.fileCount, "file")}</span>
+          <span>{formatBytes(site.totalBytes)}</span>
         </div>
         <div className="flex gap-3 text-[12.5px] text-muted md:grid md:gap-0">
-          <span title={fullDate(d.createdAt)}>{timeAgo(d.createdAt)}</span>
-          {d.expiresAt && (
+          <span title={`Updated ${fullDate(site.updatedAt)}`}>{timeAgo(site.updatedAt)}</span>
+          {site.expiresAt && (
             <span
-              title={fullDate(d.expiresAt)}
+              title={fullDate(site.expiresAt)}
               className="inline-flex items-center gap-1 text-warn"
             >
               <Clock className="size-3" aria-hidden />
-              {timeAgo(d.expiresAt)}
+              {timeAgo(site.expiresAt)}
             </span>
           )}
         </div>
       </div>
       <div className="relative z-10">
-        <SiteMenu deployment={d} />
+        <SiteMenu site={site} />
       </div>
     </div>
   )
@@ -284,10 +264,10 @@ function EmptyState() {
         </p>
       </div>
       <div className="flex gap-2">
-        <Button variant="accent" onClick={pickFolder}>
+        <Button variant="accent" onClick={() => pickFolder()}>
           <FolderUp className="size-4" aria-hidden /> Upload folder
         </Button>
-        <Button onClick={pickFiles}>
+        <Button onClick={() => pickFiles()}>
           <FilePlus2 className="size-4" aria-hidden /> Upload files
         </Button>
       </div>

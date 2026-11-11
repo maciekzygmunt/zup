@@ -1,41 +1,44 @@
 import { Switch } from "@base-ui/react/switch"
 import { useMutation } from "@tanstack/react-query"
-import type { DeploymentDetail } from "@zup/shared"
+import type { SiteDetail } from "@zup/shared"
 import { formatBytes } from "@zup/shared"
 import {
   ArrowLeft,
+  ChevronDown,
   Download,
   ExternalLink,
+  FilePlus2,
   FolderTree,
+  FolderUp,
   Pencil,
-  Plus,
   Share2,
   ShieldCheck,
   Trash2,
+  Upload,
 } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { Link, useParams } from "react-router"
 import { toast } from "sonner"
-import { AliasMenu } from "../components/AliasMenu.tsx"
-import { AccessBadge, AliasAccessBadge } from "../components/access.tsx"
+import { SiteAccessBadge } from "../components/access.tsx"
 import { CopyButton } from "../components/copy.tsx"
+import { Menu, MenuItem } from "../components/Menu.tsx"
 import { copyShareLink } from "../components/SiteMenu.tsx"
 import {
-  AddAliasDialog,
   ChangeAccessDialog,
-  DeleteDeploymentDialog,
+  DeleteSiteDialog,
   EditDetailsDialog,
   siteName,
 } from "../components/site-dialogs.tsx"
 import { Button, buttonClass, Card, ErrorNote, Mono, Spinner } from "../components/ui.tsx"
+import { useUpload } from "../components/upload/UploadProvider.tsx"
 import { api, errorMessage, parseResponse } from "../lib/api.ts"
 import { fullDate, plural, timeAgo } from "../lib/format.ts"
 import { browseHref, downloadHref, fileHref, openHref } from "../lib/links.ts"
-import { useDeployment, useInvalidateSites } from "../lib/queries.ts"
+import { useInvalidateSites, useSite } from "../lib/queries.ts"
 
 export function SiteDetailPage() {
-  const { id = "" } = useParams()
-  const deployment = useDeployment(id)
+  const { slug = "" } = useParams()
+  const site = useSite(slug)
   return (
     <div className="grid gap-6">
       <Link
@@ -44,16 +47,16 @@ export function SiteDetailPage() {
       >
         <ArrowLeft className="size-3.5" aria-hidden /> Sites
       </Link>
-      {deployment.isPending && <Spinner className="mx-auto my-16" />}
-      {deployment.error && <ErrorNote>{errorMessage(deployment.error)}</ErrorNote>}
-      {deployment.data && <Detail deployment={deployment.data} />}
+      {site.isPending && <Spinner className="mx-auto my-16" />}
+      {site.error && <ErrorNote>{errorMessage(site.error)}</ErrorNote>}
+      {site.data && <Detail site={site.data} />}
     </div>
   )
 }
 
-type DialogName = "access" | "details" | "alias" | "delete"
+type DialogName = "access" | "details" | "delete"
 
-function Detail({ deployment: d }: { deployment: DeploymentDetail }) {
+function Detail({ site: d }: { site: SiteDetail }) {
   const [dialog, setDialog] = useState<DialogName | null>(null)
   const control = (name: DialogName) => ({
     open: dialog === name,
@@ -65,8 +68,8 @@ function Detail({ deployment: d }: { deployment: DeploymentDetail }) {
         <div className="grid min-w-0 gap-1">
           <h1 className="truncate text-xl font-semibold">{siteName(d)}</h1>
           <div className="flex flex-wrap items-center gap-2">
-            <AccessBadge access={d.access} />
-            <Mono className="text-muted">{d.id}</Mono>
+            <SiteAccessBadge site={d} />
+            <Mono className="text-muted">/{d.slug}</Mono>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -97,13 +100,14 @@ function Detail({ deployment: d }: { deployment: DeploymentDetail }) {
           }
         >
           <div className="flex flex-wrap items-center gap-2">
-            <AccessBadge access={d.access} />
+            <SiteAccessBadge site={d} />
+            {d.access === "public" && (
+              <span className="text-xs text-muted">
+                Search engines {d.indexable ? "allowed" : "blocked"}
+              </span>
+            )}
             {d.access === "password" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => copyShareLink({ deploymentId: d.id })}
-              >
+              <Button size="sm" variant="ghost" onClick={() => copyShareLink(d.slug)}>
                 <Share2 className="size-3.5" aria-hidden /> Copy share link
               </Button>
             )}
@@ -121,8 +125,12 @@ function Detail({ deployment: d }: { deployment: DeploymentDetail }) {
             <dt className="text-muted">Title</dt>
             <dd>{d.title || <span className="text-muted">None</span>}</dd>
             <dt className="text-muted">Created</dt>
-            <dd title={fullDate(d.createdAt)}>
-              {fullDate(d.createdAt)} · {timeAgo(d.createdAt)} · from {d.source}
+            <dd>
+              {fullDate(d.createdAt)} · {timeAgo(d.createdAt)}
+            </dd>
+            <dt className="text-muted">Updated</dt>
+            <dd>
+              {fullDate(d.updatedAt)} · {timeAgo(d.updatedAt)} · from {d.source}
             </dd>
             <dt className="text-muted">Expires</dt>
             <dd className={d.expiresAt ? "text-warn" : undefined}>
@@ -143,33 +151,25 @@ function Detail({ deployment: d }: { deployment: DeploymentDetail }) {
           </dl>
         </Row>
         <Row label="SPA mode">
-          <SpaToggle deployment={d} />
+          <SpaToggle site={d} />
         </Row>
       </Card>
 
-      <AliasesSection deployment={d} onAdd={() => setDialog("alias")} />
-      <FilesSection deployment={d} />
+      <FilesSection site={d} />
 
       <section className="grid gap-2">
         <h2 className="text-[13px] font-semibold text-danger">Danger zone</h2>
         <Card className="flex flex-wrap items-center justify-between gap-3 border-danger/30 p-4">
-          <p className="text-[13px] text-muted">
-            Delete this deployment, its files
-            {d.aliases.length ? ` and ${plural(d.aliases.length, "alias", "aliases")}` : ""}.
-          </p>
+          <p className="text-[13px] text-muted">Delete this site and its files.</p>
           <Button variant="danger" onClick={() => setDialog("delete")}>
             <Trash2 className="size-4" aria-hidden /> Delete
           </Button>
         </Card>
       </section>
 
-      <ChangeAccessDialog
-        target={{ kind: "deployment", id: d.id, access: d.access, aliases: d.aliases }}
-        {...control("access")}
-      />
-      <EditDetailsDialog deployment={d} {...control("details")} />
-      <AddAliasDialog deployment={d} {...control("alias")} />
-      <DeleteDeploymentDialog deployment={d} afterDelete="/" {...control("delete")} />
+      <ChangeAccessDialog site={d} {...control("access")} />
+      <EditDetailsDialog site={d} {...control("details")} />
+      <DeleteSiteDialog site={d} afterDelete="/" {...control("delete")} />
     </>
   )
 }
@@ -201,15 +201,15 @@ function UrlLine({ url }: { url: string }) {
   )
 }
 
-function SpaToggle({ deployment }: { deployment: DeploymentDetail }) {
+function SpaToggle({ site }: { site: SiteDetail }) {
   const invalidate = useInvalidateSites()
   const mutation = useMutation({
     mutationFn: (spa: boolean) =>
-      parseResponse(api.deployments[":id"].$patch({ param: { id: deployment.id }, json: { spa } })),
+      parseResponse(api.sites[":slug"].$patch({ param: { slug: site.slug }, json: { spa } })),
     onSuccess: () => invalidate(),
     onError: (error) => toast.error(errorMessage(error)),
   })
-  const checked = mutation.isPending ? !!mutation.variables : deployment.spa
+  const checked = mutation.isPending ? !!mutation.variables : site.spa
   return (
     <div className="flex items-start gap-3 text-[13px]">
       <Switch.Root
@@ -229,49 +229,37 @@ function SpaToggle({ deployment }: { deployment: DeploymentDetail }) {
   )
 }
 
-function AliasesSection({
-  deployment,
-  onAdd,
-}: {
-  deployment: DeploymentDetail
-  onAdd: () => void
-}) {
+// Uploads new files that replace all files of the site.
+function ReplaceButton({ site }: { site: SiteDetail }) {
+  const { pickFiles, pickFolder } = useUpload()
   return (
-    <section className="grid gap-2">
-      <div className="flex items-center justify-between">
-        <h2 className="text-[13px] font-semibold">Aliases</h2>
-        <Button size="sm" onClick={onAdd}>
-          <Plus className="size-3.5" aria-hidden /> Add alias
-        </Button>
-      </div>
-      {deployment.aliases.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-[13px] text-muted">
-          No aliases. Add one to give this site a stable URL you can move to new uploads.
-        </p>
-      ) : (
-        <Card className="divide-y divide-line">
-          {deployment.aliases.map((alias) => (
-            <div key={alias.name} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="grid min-w-0 flex-1 gap-0.5">
-                <Mono className="truncate font-medium">/{alias.name}</Mono>
-                <Mono className="truncate text-muted">{alias.url}</Mono>
-              </div>
-              <AliasAccessBadge alias={alias} />
-              <AliasMenu alias={alias} />
-            </div>
-          ))}
-        </Card>
-      )}
-    </section>
+    <Menu
+      trigger={
+        <button type="button" className={buttonClass("secondary", "sm")}>
+          <Upload className="size-3.5" aria-hidden /> Replace files
+          <ChevronDown className="size-3 opacity-70" aria-hidden />
+        </button>
+      }
+    >
+      <MenuItem icon={FilePlus2} onClick={() => pickFiles(site)}>
+        Files…
+      </MenuItem>
+      <MenuItem icon={FolderUp} onClick={() => pickFolder(site)}>
+        Folder…
+      </MenuItem>
+    </Menu>
   )
 }
 
-function FilesSection({ deployment: d }: { deployment: DeploymentDetail }) {
+function FilesSection({ site: d }: { site: SiteDetail }) {
   return (
     <section className="grid gap-2">
-      <h2 className="text-[13px] font-semibold">
-        Files <span className="font-normal text-muted">({d.files.length.toLocaleString()})</span>
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-[13px] font-semibold">
+          Files <span className="font-normal text-muted">({d.files.length.toLocaleString()})</span>
+        </h2>
+        <ReplaceButton site={d} />
+      </div>
       <Card className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead className="text-left text-xs text-muted">
@@ -311,7 +299,7 @@ function FilesSection({ deployment: d }: { deployment: DeploymentDetail }) {
                 </td>
                 <td className="px-2 py-1">
                   <a
-                    href={downloadHref(d.id, file.path)}
+                    href={downloadHref(d.slug, file.path)}
                     download
                     className={buttonClass("ghost", "icon")}
                     aria-label={`Download ${file.path}`}
