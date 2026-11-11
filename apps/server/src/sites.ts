@@ -1,51 +1,39 @@
 import {
   type AccessInput,
   type AccessType,
-  type AliasSummary,
-  type createDeploymentSchema,
-  type DeploymentDetail,
-  type DeploymentSummary,
+  type createSiteSchema,
   type GrantedKey,
   generateKey,
   inferEntrypoint,
   isHtmlPath,
   type ManifestFile,
-  type putAliasSchema,
-  type UpdateAliasInput,
-  type UpdateDeploymentInput,
+  type SiteDetail,
+  type SiteSummary,
+  type UpdateSiteInput,
 } from "@zup/shared"
-import {
-  and,
-  count,
-  desc,
-  eq,
-  exists,
-  inArray,
-  isNull,
-  like,
-  lt,
-  notExists,
-  or,
-  sql,
-} from "drizzle-orm"
+import { and, count, desc, eq, lt, or, sql } from "drizzle-orm"
 import type { z } from "zod"
 import type { BlobStore } from "./blobs.ts"
 import type { Config } from "./config.ts"
 import type { Db } from "./db/client.ts"
-import { type Alias, aliases, type Deployment, deploymentFiles, deployments } from "./db/schema.ts"
+import { type Site, siteFiles, sites } from "./db/schema.ts"
 import { HttpError } from "./errors.ts"
-import { deploymentId } from "./ids.ts"
+import { randomSlug, siteId } from "./ids.ts"
 import { hashPassword, shareToken, siteScope } from "./passwords.ts"
 
 export type SiteService = ReturnType<typeof createSiteService>
-export type ShareTarget = { deploymentId: string } | { alias: string }
 
 type StoredAccess = { access: AccessType; passwordHash: string | null }
 
-// How long a deployment stays after an alias moves away from it.
-const REPLACED_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const slugTaken = (slug: string) => new HttpError(409, "slug_taken", `Slug ${slug} is in use`)
 
-// Deployments (immutable uploads) and aliases (stable names that point at one deployment).
+// Some Drizzle calls wrap the SQLite error in `cause`, others throw it as is.
+function isUniqueViolation(error: unknown) {
+  const { code, cause } = error as { code?: string; cause?: { code?: string } }
+  return (code ?? cause?.code) === "SQLITE_CONSTRAINT_UNIQUE"
+}
+
+// Sites: one slug (the URL), one access setting and one set of files. An update replaces the files.
 export function createSiteService({
   config,
   db,
@@ -55,82 +43,54 @@ export function createSiteService({
   db: Db
   blobs: BlobStore
 }) {
-  const deploymentUrl = (id: string) => `${config.previewOrigin}/u/${id}/`
-  const aliasUrl = (name: string) => `${config.previewOrigin}/${name}/`
-  const urlFor = (target: ShareTarget) =>
-    "alias" in target ? aliasUrl(target.alias) : deploymentUrl(target.deploymentId)
+  const siteUrl = (slug: string) => `${config.previewOrigin}/${slug}/`
 
   // Hashes a chosen key or generates one. The plain key is returned once and never stored.
   async function storedAccess(
     input: AccessInput,
-    target: ShareTarget,
+    slug: string,
   ): Promise<StoredAccess & { key?: GrantedKey }> {
     if (input.type !== "password") return { access: input.type, passwordHash: null }
     const key = input.password ?? generateKey()
     return {
       access: "password",
       passwordHash: await hashPassword(key),
-      key: { key, shareUrl: `${urlFor(target)}#password=${encodeURIComponent(key)}` },
+      key: { key, shareUrl: `${siteUrl(slug)}#password=${encodeURIComponent(key)}` },
     }
   }
 
-  // Only public aliases can be indexed: other access turns it off, and asking for it fails.
+  // Only public sites can be indexed: other access turns it off, and asking for it fails.
   function indexableFor(access: AccessType, requested: boolean | undefined, current: boolean) {
     if (access === "public") return requested ?? current
     if (requested) {
-      throw new HttpError(422, "not_public", "Only public aliases can allow search engines")
+      throw new HttpError(422, "not_public", "Only public sites can allow search engines")
     }
     return false
   }
 
-  const aliasSummary = (alias: Alias, deploymentTitle: string | null): AliasSummary => ({
-    name: alias.name,
-    deploymentId: alias.deploymentId,
-    deploymentTitle,
-    access: alias.access,
-    indexable: alias.indexable,
-    url: aliasUrl(alias.name),
-    createdAt: alias.createdAt.toISOString(),
-    updatedAt: alias.updatedAt.toISOString(),
+  const summary = (site: Site): SiteSummary => ({
+    slug: site.slug,
+    title: site.title,
+    access: site.access,
+    indexable: site.indexable,
+    url: siteUrl(site.slug),
+    entrypoint: site.entrypoint,
+    spa: site.spa,
+    fileCount: site.fileCount,
+    totalBytes: site.totalBytes,
+    source: site.source,
+    createdAt: site.createdAt.toISOString(),
+    updatedAt: site.updatedAt.toISOString(),
+    expiresAt: site.expiresAt?.toISOString() ?? null,
   })
 
-  function deploymentSummary(deployment: Deployment, aliasRows: Alias[]): DeploymentSummary {
-    return {
-      id: deployment.id,
-      title: deployment.title,
-      access: deployment.access,
-      url: deploymentUrl(deployment.id),
-      entrypoint: deployment.entrypoint,
-      spa: deployment.spa,
-      fileCount: deployment.fileCount,
-      totalBytes: deployment.totalBytes,
-      source: deployment.source,
-      createdAt: deployment.createdAt.toISOString(),
-      expiresAt: deployment.expiresAt?.toISOString() ?? null,
-      aliases: aliasRows
-        .filter((a) => a.deploymentId === deployment.id)
-        .map((a) => aliasSummary(a, deployment.title)),
-    }
-  }
+  const findSite = async (slug: string) =>
+    (await db.query.sites.findFirst({ where: eq(sites.slug, slug) })) ?? null
 
-  async function summaries(rows: Deployment[]) {
-    const ids = rows.map((row) => row.id)
-    const aliasRows = ids.length
-      ? await db.select().from(aliases).where(inArray(aliases.deploymentId, ids))
-      : []
-    return rows.map((row) => deploymentSummary(row, aliasRows))
-  }
-
-  async function requireDeployment(id: string) {
-    const deployment = await db.query.deployments.findFirst({ where: eq(deployments.id, id) })
-    if (!deployment) throw new HttpError(404, "deployment_not_found", `No deployment ${id}`)
-    return deployment
-  }
-
-  async function requireAlias(name: string) {
-    const alias = await db.query.aliases.findFirst({ where: eq(aliases.name, name) })
-    if (!alias) throw new HttpError(404, "alias_not_found", `No alias ${name}`)
-    return alias
+  async function requireSite(slug: string) {
+    const site = await findSite(slug)
+    if (!site) throw new HttpError(404, "site_not_found", `No site ${slug}`)
+    return site
   }
 
   function futureDate(value: string | null | undefined) {
@@ -144,7 +104,7 @@ export function createSiteService({
 
   async function validateFiles(files: ManifestFile[]) {
     if (files.length > config.MAX_FILES) {
-      throw new HttpError(422, "too_many_files", `A deployment can have ${config.MAX_FILES} files`)
+      throw new HttpError(422, "too_many_files", `A site can have ${config.MAX_FILES} files`)
     }
     const paths = new Set<string>()
     let totalBytes = 0
@@ -159,7 +119,7 @@ export function createSiteService({
       totalBytes += file.size
     }
     if (totalBytes > config.MAX_DEPLOYMENT_BYTES) {
-      throw new HttpError(413, "deployment_too_large", "Deployment is too large")
+      throw new HttpError(413, "site_too_large", "The files are larger than the per-site limit")
     }
     const missing: string[] = []
     await Promise.all(
@@ -178,44 +138,64 @@ export function createSiteService({
   }
 
   return {
-    deploymentUrl,
-    aliasUrl,
+    siteUrl,
 
-    async createDeployment(input: z.output<typeof createDeploymentSchema>) {
+    // Creates a site, or with `update` replaces the files of the site at `slug`.
+    // Omitted settings keep their current values on update.
+    async createSite(input: z.output<typeof createSiteSchema>) {
       const totalBytes = await validateFiles(input.files)
       const paths = input.files.map((file) => file.path)
       if (input.entrypoint && !paths.includes(input.entrypoint)) {
         throw new HttpError(422, "invalid_entrypoint", `${input.entrypoint} is not in the upload`)
       }
+      const existing = input.slug ? await findSite(input.slug) : null
+      if (existing && !input.update) throw slugTaken(existing.slug)
+      const slug = input.slug ?? randomSlug()
+      const granted = input.access && (await storedAccess(input.access, slug))
+      const { access, passwordHash } = granted ??
+        existing ?? { access: "private" as const, passwordHash: null }
       const entrypoint = input.entrypoint ?? inferEntrypoint(paths)
-      const id = deploymentId()
-      const { key, ...access } = await storedAccess(input.access, { deploymentId: id })
-      const row: Deployment = {
-        id,
-        title: input.title || null,
+      const now = new Date()
+      const row: Site = {
+        id: existing?.id ?? siteId(),
+        slug,
+        title: input.title === undefined ? (existing?.title ?? null) : input.title || null,
         entrypoint,
-        spa: input.spa ?? (entrypoint !== null && isHtmlPath(entrypoint)),
-        ...access,
+        spa: input.spa ?? existing?.spa ?? (entrypoint !== null && isHtmlPath(entrypoint)),
+        access,
+        passwordHash,
+        indexable: indexableFor(access, input.indexable, existing?.indexable ?? false),
         fileCount: input.files.length,
         totalBytes,
         source: input.source,
-        createdAt: new Date(),
-        expiresAt: futureDate(input.expiresAt),
-        autoExpiry: false,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        expiresAt: input.expiresAt ? futureDate(input.expiresAt) : (existing?.expiresAt ?? null),
       }
-      db.transaction((tx) => {
-        tx.insert(deployments).values(row).run()
-        // Chunked to stay below SQLite's bound-parameter limit.
-        for (let i = 0; i < input.files.length; i += 1000) {
-          tx.insert(deploymentFiles)
-            .values(input.files.slice(i, i + 1000).map((file) => ({ deploymentId: id, ...file })))
-            .run()
-        }
-      })
-      return { deployment: deploymentSummary(row, []), key }
+      try {
+        db.transaction((tx) => {
+          if (existing) {
+            tx.update(sites).set(row).where(eq(sites.id, row.id)).run()
+            tx.delete(siteFiles).where(eq(siteFiles.siteId, row.id)).run()
+          } else {
+            tx.insert(sites).values(row).run()
+          }
+          // Chunked to stay below SQLite's bound-parameter limit.
+          for (let i = 0; i < input.files.length; i += 1000) {
+            tx.insert(siteFiles)
+              .values(input.files.slice(i, i + 1000).map((file) => ({ siteId: row.id, ...file })))
+              .run()
+          }
+        })
+      } catch (error) {
+        // Another request took the slug since the check above.
+        if (isUniqueViolation(error)) throw slugTaken(slug)
+        throw error
+      }
+      return { site: summary(row), key: granted?.key, created: !existing }
     },
 
-    async listDeployments(options: {
+    async listSites(options: {
       query?: string
       access?: AccessType
       limit: number
@@ -223,208 +203,100 @@ export function createSiteService({
     }) {
       const pattern = options.query ? `%${options.query.replace(/[%_\\]/g, "\\$&")}%` : null
       const where = and(
-        options.access ? eq(deployments.access, options.access) : undefined,
+        options.access ? eq(sites.access, options.access) : undefined,
         pattern
           ? or(
-              sql`${deployments.title} LIKE ${pattern} ESCAPE '\\'`,
-              like(deployments.id, pattern),
-              exists(
-                db
-                  .select({ one: sql`1` })
-                  .from(aliases)
-                  .where(
-                    and(
-                      eq(aliases.deploymentId, deployments.id),
-                      sql`${aliases.name} LIKE ${pattern} ESCAPE '\\'`,
-                    ),
-                  ),
-              ),
+              sql`${sites.title} LIKE ${pattern} ESCAPE '\\'`,
+              sql`${sites.slug} LIKE ${pattern} ESCAPE '\\'`,
             )
           : undefined,
       )
       const [rows, [total]] = await Promise.all([
         db
           .select()
-          .from(deployments)
+          .from(sites)
           .where(where)
-          .orderBy(desc(deployments.createdAt))
+          .orderBy(desc(sites.updatedAt))
           .limit(options.limit)
           .offset(options.offset),
-        db.select({ value: count() }).from(deployments).where(where),
+        db.select({ value: count() }).from(sites).where(where),
       ])
-      return { deployments: await summaries(rows), total: total?.value ?? 0 }
+      return { sites: rows.map(summary), total: total?.value ?? 0 }
     },
 
-    async getDeployment(id: string): Promise<DeploymentDetail> {
-      const deployment = await requireDeployment(id)
-      const [summary] = await summaries([deployment])
+    async getSite(slug: string): Promise<SiteDetail> {
+      const site = await requireSite(slug)
       const files = await db
         .select({
-          path: deploymentFiles.path,
-          hash: deploymentFiles.hash,
-          size: deploymentFiles.size,
-          contentType: deploymentFiles.contentType,
+          path: siteFiles.path,
+          hash: siteFiles.hash,
+          size: siteFiles.size,
+          contentType: siteFiles.contentType,
         })
-        .from(deploymentFiles)
-        .where(eq(deploymentFiles.deploymentId, id))
-        .orderBy(deploymentFiles.path)
-      return { ...summary!, files }
+        .from(siteFiles)
+        .where(eq(siteFiles.siteId, site.id))
+        .orderBy(siteFiles.path)
+      return { ...summary(site), files }
     },
 
-    async updateDeployment(id: string, patch: UpdateDeploymentInput) {
-      const current = await requireDeployment(id)
-      const access = patch.access && (await storedAccess(patch.access, { deploymentId: id }))
-      await db
-        .update(deployments)
-        .set({
-          title: patch.title === undefined ? undefined : patch.title || null,
-          spa: patch.spa,
-          expiresAt: patch.expiresAt === undefined ? undefined : futureDate(patch.expiresAt),
-          autoExpiry: patch.expiresAt === undefined ? undefined : false,
-          access: access?.access,
-          passwordHash: access ? access.passwordHash : undefined,
-        })
-        .where(eq(deployments.id, current.id))
-      const [summary] = await summaries([await requireDeployment(id)])
-      return { deployment: summary!, key: access?.key }
+    async findFile(slug: string, path: string) {
+      const [file] = await db
+        .select({ hash: siteFiles.hash, size: siteFiles.size, contentType: siteFiles.contentType })
+        .from(siteFiles)
+        .innerJoin(sites, eq(sites.id, siteFiles.siteId))
+        .where(and(eq(sites.slug, slug), eq(siteFiles.path, path)))
+      return file ?? null
     },
 
-    async deleteDeployment(id: string) {
-      await requireDeployment(id)
-      await db.delete(deployments).where(eq(deployments.id, id))
-    },
-
-    async listAliases() {
-      const rows = await db
-        .select({ alias: aliases, title: deployments.title })
-        .from(aliases)
-        .innerJoin(deployments, eq(aliases.deploymentId, deployments.id))
-        .orderBy(aliases.name)
-      return rows.map((row) => aliasSummary(row.alias, row.title))
-    },
-
-    async putAlias(name: string, input: z.output<typeof putAliasSchema>) {
-      const deployment = await requireDeployment(input.deploymentId)
-      const existing = await db.query.aliases.findFirst({ where: eq(aliases.name, name) })
-      if (existing && input.mode === "create") {
-        throw new HttpError(409, "alias_exists", `Alias ${name} already exists`)
-      }
-      // Moving an alias keeps its access, password and indexable unless new values are given.
-      const access = input.access
-        ? await storedAccess(input.access, { alias: name })
-        : (existing ?? { access: "private" as const, passwordHash: null })
-      const now = new Date()
-      const row: Alias = {
-        name,
-        deploymentId: input.deploymentId,
-        access: access.access,
-        passwordHash: access.passwordHash,
-        indexable: indexableFor(access.access, input.indexable, existing?.indexable ?? false),
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      }
-      // Reads happen inside the transaction, so concurrent requests do not use stale rows.
-      const previousId = db.transaction((tx) => {
-        const replaced = tx
-          .select({ deploymentId: aliases.deploymentId })
-          .from(aliases)
-          .where(eq(aliases.name, name))
-          .get()
-        tx.insert(aliases)
-          .values(row)
-          .onConflictDoUpdate({ target: aliases.name, set: { ...row, createdAt: undefined } })
-          .run()
-        tx.update(deployments)
-          .set({ expiresAt: null, autoExpiry: false })
-          .where(and(eq(deployments.id, deployment.id), eq(deployments.autoExpiry, true)))
-          .run()
-        const replacedId =
-          replaced && replaced.deploymentId !== row.deploymentId ? replaced.deploymentId : null
-        // The replaced deployment expires later, unless it has an expiry or another alias.
-        if (replacedId) {
-          tx.update(deployments)
-            .set({ expiresAt: new Date(now.getTime() + REPLACED_TTL_MS), autoExpiry: true })
-            .where(
-              and(
-                eq(deployments.id, replacedId),
-                isNull(deployments.expiresAt),
-                notExists(
-                  tx
-                    .select({ one: sql`1` })
-                    .from(aliases)
-                    .where(eq(aliases.deploymentId, replacedId)),
-                ),
-              ),
-            )
-            .run()
-        }
-        return replacedId
-      })
-      const previous =
-        previousId &&
-        (await db.query.deployments.findFirst({
-          columns: { id: true, expiresAt: true },
-          where: eq(deployments.id, previousId),
-        }))
-      return {
-        alias: aliasSummary(row, deployment.title),
-        key: "key" in access ? access.key : undefined,
-        created: !existing,
-        previous: previous
-          ? { id: previous.id, expiresAt: previous.expiresAt?.toISOString() ?? null }
-          : null,
-      }
-    },
-
-    async updateAlias(name: string, input: UpdateAliasInput) {
-      const current = await requireAlias(name)
-      // Omitted access keeps the current access and password.
-      const granted = input.access && (await storedAccess(input.access, { alias: name }))
+    async updateSite(slug: string, patch: UpdateSiteInput) {
+      const current = await requireSite(slug)
+      const nextSlug = patch.slug ?? current.slug
+      // A new password's share link uses the new slug.
+      const granted = patch.access && (await storedAccess(patch.access, nextSlug))
       const { access, passwordHash } = granted ?? current
-      await db
-        .update(aliases)
-        .set({
-          access,
-          passwordHash,
-          indexable: indexableFor(access, input.indexable, current.indexable),
-          updatedAt: new Date(),
-        })
-        .where(eq(aliases.name, name))
-      const alias = await requireAlias(name)
-      const { title } = await requireDeployment(alias.deploymentId)
-      return { alias: aliasSummary(alias, title), key: granted?.key }
+      try {
+        await db
+          .update(sites)
+          .set({
+            slug: nextSlug,
+            title: patch.title === undefined ? undefined : patch.title || null,
+            spa: patch.spa,
+            expiresAt: patch.expiresAt === undefined ? undefined : futureDate(patch.expiresAt),
+            access,
+            passwordHash,
+            indexable: indexableFor(access, patch.indexable, current.indexable),
+            updatedAt: new Date(),
+          })
+          .where(eq(sites.id, current.id))
+      } catch (error) {
+        if (isUniqueViolation(error)) throw slugTaken(nextSlug)
+        throw error
+      }
+      return { site: summary(await requireSite(nextSlug)), key: granted?.key }
     },
 
-    async deleteAlias(name: string) {
-      await requireAlias(name)
-      await db.delete(aliases).where(eq(aliases.name, name))
+    async deleteSite(slug: string) {
+      const site = await requireSite(slug)
+      await db.delete(sites).where(eq(sites.id, site.id))
     },
 
     // A working link for a password-protected site, without knowing the key.
-    async shareLink(target: ShareTarget) {
-      const record =
-        "alias" in target
-          ? await requireAlias(target.alias)
-          : await requireDeployment(target.deploymentId)
-      if (record.access !== "password" || !record.passwordHash) {
+    async shareLink(slug: string) {
+      const site = await requireSite(slug)
+      if (site.access !== "password" || !site.passwordHash) {
         throw new HttpError(409, "not_password_protected", "This site is not password protected")
       }
-      const url = urlFor(target)
-      const token = shareToken(config.BETTER_AUTH_SECRET, siteScope(target), record.passwordHash)
+      const url = siteUrl(site.slug)
+      const token = shareToken(config.BETTER_AUTH_SECRET, siteScope(site.id), site.passwordHash)
       return { url, shareUrl: `${url}#token=${token}` }
     },
 
     async stats() {
       const [totals] = await db
-        .select({
-          deployments: count(),
-          bytes: sql<number>`coalesce(sum(${deployments.totalBytes}), 0)`,
-        })
-        .from(deployments)
-      const [aliasCount] = await db.select({ value: count() }).from(aliases)
+        .select({ sites: count(), bytes: sql<number>`coalesce(sum(${sites.totalBytes}), 0)` })
+        .from(sites)
       return {
-        deployments: totals?.deployments ?? 0,
-        aliases: aliasCount?.value ?? 0,
+        sites: totals?.sites ?? 0,
         uploadedBytes: totals?.bytes ?? 0,
         storedBytes: await blobs.usedBytes(),
       }
@@ -432,21 +304,21 @@ export function createSiteService({
 
     async purgeExpired() {
       const expired = await db
-        .delete(deployments)
-        .where(lt(deployments.expiresAt, new Date()))
-        .returning({ id: deployments.id })
+        .delete(sites)
+        .where(lt(sites.expiresAt, new Date()))
+        .returning({ id: sites.id })
       return expired.length
     },
 
-    // Deletes blobs no deployment references. Recent blobs are kept for uploads in progress.
+    // Deletes blobs no site references. Recent blobs are kept for uploads in progress.
     async collectGarbage(graceMs = 6 * 60 * 60 * 1000) {
       let removed = 0
       const cutoff = Date.now() - graceMs
       for await (const blob of blobs.list()) {
         if (blob.mtimeMs > cutoff) continue
-        const used = await db.query.deploymentFiles.findFirst({
+        const used = await db.query.siteFiles.findFirst({
           columns: { hash: true },
-          where: eq(deploymentFiles.hash, blob.hash),
+          where: eq(siteFiles.hash, blob.hash),
         })
         if (!used) {
           await blobs.remove(blob.hash)

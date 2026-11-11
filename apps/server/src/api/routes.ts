@@ -2,25 +2,19 @@ import type { Database } from "bun:sqlite"
 import { zValidator } from "@hono/zod-validator"
 import {
   accessTypes,
-  aliasNameSchema,
-  createDeploymentSchema,
+  createSiteSchema,
   missingBlobsSchema,
-  putAliasSchema,
   type ServerInfo,
   sha256Schema,
-  shareLinkSchema,
-  updateAliasSchema,
-  updateDeploymentSchema,
+  slugSchema,
+  updateSiteSchema,
 } from "@zup/shared"
-import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { createMiddleware } from "hono/factory"
 import { z } from "zod"
 import { type Auth, hasOwner } from "../auth.ts"
 import type { BlobStore } from "../blobs.ts"
 import type { Config } from "../config.ts"
-import type { Db } from "../db/client.ts"
-import { deploymentFiles } from "../db/schema.ts"
 import { HttpError } from "../errors.ts"
 import type { SiteService } from "../sites.ts"
 
@@ -28,7 +22,6 @@ export const version = "1.0.0"
 
 type Deps = {
   config: Config
-  db: Db
   sqlite: Database
   auth: Auth
   blobs: BlobStore
@@ -48,9 +41,9 @@ const validate = <T extends z.ZodType, Target extends "json" | "query" | "param"
     }
   })
 
-const nameParam = z.object({ name: aliasNameSchema })
+const slugParam = z.object({ slug: slugSchema })
 
-export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps) {
+export function createApiRoutes({ config, sqlite, auth, blobs, sites }: Deps) {
   // Every route below needs the owner's session: a dashboard cookie or a CLI bearer token.
   const requireOwner = createMiddleware<{ Variables: { session: Auth["$Infer"]["Session"] } }>(
     async (c, next) => {
@@ -72,7 +65,7 @@ export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps
     version,
     limits: {
       maxFileBytes: config.MAX_FILE_BYTES,
-      maxDeploymentBytes: config.MAX_DEPLOYMENT_BYTES,
+      maxSiteBytes: config.MAX_DEPLOYMENT_BYTES,
       maxFiles: config.MAX_FILES,
     },
   }
@@ -110,12 +103,13 @@ export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps
         return c.body(null, 204)
       })
 
-      .post("/deployments", validate("json", createDeploymentSchema), async (c) =>
-        c.json(await sites.createDeployment(c.req.valid("json")), 201),
-      )
+      .post("/sites", validate("json", createSiteSchema), async (c) => {
+        const result = await sites.createSite(c.req.valid("json"))
+        return c.json(result, result.created ? 201 : 200)
+      })
 
       .get(
-        "/deployments",
+        "/sites",
         validate(
           "query",
           z.object({
@@ -127,34 +121,41 @@ export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps
         ),
         async (c) => {
           const { q, ...options } = c.req.valid("query")
-          return c.json(await sites.listDeployments({ query: q, ...options }))
+          return c.json(await sites.listSites({ query: q, ...options }))
         },
       )
 
-      .get("/deployments/:id", async (c) => c.json(await sites.getDeployment(c.req.param("id"))))
-
-      .patch("/deployments/:id", validate("json", updateDeploymentSchema), async (c) =>
-        c.json(await sites.updateDeployment(c.req.param("id"), c.req.valid("json"))),
+      .get("/sites/:slug", validate("param", slugParam), async (c) =>
+        c.json(await sites.getSite(c.req.valid("param").slug)),
       )
 
-      .delete("/deployments/:id", async (c) => {
-        await sites.deleteDeployment(c.req.param("id"))
+      .patch(
+        "/sites/:slug",
+        validate("param", slugParam),
+        validate("json", updateSiteSchema),
+        async (c) => c.json(await sites.updateSite(c.req.valid("param").slug, c.req.valid("json"))),
+      )
+
+      .delete("/sites/:slug", validate("param", slugParam), async (c) => {
+        await sites.deleteSite(c.req.valid("param").slug)
         return c.body(null, 204)
       })
 
+      .post("/sites/:slug/share-link", validate("param", slugParam), async (c) =>
+        c.json(await sites.shareLink(c.req.valid("param").slug)),
+      )
+
       // Raw bytes of one file, used by `zup pull` and dashboard downloads.
-      .get("/deployments/:id/files/*", async (c) => {
-        const id = c.req.param("id")
-        const prefix = `/api/deployments/${id}/files`
+      .get("/sites/:slug/files/*", async (c) => {
+        const slug = c.req.param("slug")
+        const prefix = `/api/sites/${slug}/files`
         let path: string
         try {
           path = decodeURIComponent(new URL(c.req.url).pathname.slice(prefix.length))
         } catch {
           throw new HttpError(400, "invalid_path", "Malformed path")
         }
-        const file = await db.query.deploymentFiles.findFirst({
-          where: and(eq(deploymentFiles.deploymentId, id), eq(deploymentFiles.path, path)),
-        })
+        const file = await sites.findFile(slug, path)
         if (!file) throw new HttpError(404, "file_not_found", `No file ${path}`)
         const name = encodeURIComponent(path.split("/").pop()!)
         return c.body(blobs.file(file.hash).stream(), 200, {
@@ -165,32 +166,6 @@ export function createApiRoutes({ config, db, sqlite, auth, blobs, sites }: Deps
           "X-Content-SHA256": file.hash,
         })
       })
-
-      .get("/aliases", async (c) => c.json({ aliases: await sites.listAliases() }))
-
-      .put(
-        "/aliases/:name",
-        validate("param", nameParam),
-        validate("json", putAliasSchema),
-        async (c) => c.json(await sites.putAlias(c.req.valid("param").name, c.req.valid("json"))),
-      )
-
-      .patch(
-        "/aliases/:name",
-        validate("param", nameParam),
-        validate("json", updateAliasSchema),
-        async (c) =>
-          c.json(await sites.updateAlias(c.req.valid("param").name, c.req.valid("json"))),
-      )
-
-      .delete("/aliases/:name", validate("param", nameParam), async (c) => {
-        await sites.deleteAlias(c.req.valid("param").name)
-        return c.body(null, 204)
-      })
-
-      .post("/share-links", validate("json", shareLinkSchema), async (c) =>
-        c.json(await sites.shareLink(c.req.valid("json"))),
-      )
 
       // Better Auth's /list-sessions returns raw tokens, which are login credentials.
       // These routes expose only metadata and revoke by id.

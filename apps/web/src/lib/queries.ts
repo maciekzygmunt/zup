@@ -30,12 +30,11 @@ export const queryClient = new QueryClient({
   },
 })
 
-// Everything under "sites" changes together when a deployment or alias changes.
+// Everything under "sites" changes together when a site changes.
 export const keys = {
   sites: ["sites"] as const,
   list: (q: string, access: AccessType | undefined) => ["sites", "list", { q, access }] as const,
-  detail: (id: string) => ["sites", "detail", id] as const,
-  aliases: ["sites", "aliases"] as const,
+  detail: (slug: string) => ["sites", "detail", slug] as const,
   stats: ["sites", "stats"] as const,
 }
 
@@ -53,7 +52,7 @@ export const setupQuery = queryOptions({
 export const useInfo = () => useQuery(infoQuery).data
 
 // `keepPrevious` keeps the old results visible while a new search loads.
-export const useDeployments = (
+export const useSites = (
   q: string,
   access: AccessType | undefined,
   { keepPrevious = false } = {},
@@ -62,7 +61,7 @@ export const useDeployments = (
     queryKey: keys.list(q, access),
     queryFn: ({ pageParam }) =>
       parseResponse(
-        api.deployments.$get({
+        api.sites.$get({
           query: {
             q: q || undefined,
             access,
@@ -74,21 +73,15 @@ export const useDeployments = (
     placeholderData: keepPrevious ? keepPreviousData : undefined,
     initialPageParam: 0,
     getNextPageParam: (last, pages) => {
-      const loaded = pages.reduce((sum, page) => sum + page.deployments.length, 0)
+      const loaded = pages.reduce((sum, page) => sum + page.sites.length, 0)
       return loaded < last.total ? loaded : undefined
     },
   })
 
-export const useDeployment = (id: string) =>
+export const useSite = (slug: string) =>
   useQuery({
-    queryKey: keys.detail(id),
-    queryFn: () => parseResponse(api.deployments[":id"].$get({ param: { id } })),
-  })
-
-export const useAliases = () =>
-  useQuery({
-    queryKey: keys.aliases,
-    queryFn: async () => (await parseResponse(api.aliases.$get())).aliases,
+    queryKey: keys.detail(slug),
+    queryFn: () => parseResponse(api.sites[":slug"].$get({ param: { slug } })),
   })
 
 export const useStats = () =>

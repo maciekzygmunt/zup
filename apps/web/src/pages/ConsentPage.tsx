@@ -75,7 +75,7 @@ export function ConsentPage() {
             ))}
             <li className="flex items-center gap-2">
               <Check className="size-3.5 text-ok" aria-hidden />
-              Manage your sites and aliases
+              Manage your sites
             </li>
           </ul>
         )}

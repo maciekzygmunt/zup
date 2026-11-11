@@ -18,7 +18,7 @@ export function SetupHelp() {
           <Card className="grid gap-3 p-4">
             <CopyRow label="Install" value={`curl -fsSL ${info.appUrl}/install.sh | sh`} />
             <CopyRow label="Log in" value={`zup login ${info.appUrl}`} />
-            <CopyRow label="Publish" value="zup ./dist --alias my-site" />
+            <CopyRow label="Publish" value="zup ./dist --slug my-site" />
           </Card>
         )}
       </Section>
@@ -40,25 +40,19 @@ export function SetupHelp() {
         <Card className="grid gap-x-6 gap-y-2 p-4 text-[13px] sm:grid-cols-2">
           <Stat label="Dashboard" value={info?.appUrl} mono />
           <Stat label="Sites" value={info?.previewUrl} mono />
-          <Stat
-            label="Deployments"
-            value={
-              stats &&
-              `${plural(stats.deployments, "deployment")} · ${plural(stats.aliases, "alias", "aliases")}`
-            }
-          />
+          <Stat label="Published" value={stats && plural(stats.sites, "site")} />
           <Stat
             label="Storage"
             value={
               stats &&
-              `${formatBytes(stats.storedBytes)} on disk (${formatBytes(stats.uploadedBytes)} in deployments)`
+              `${formatBytes(stats.storedBytes)} on disk (${formatBytes(stats.uploadedBytes)} in sites)`
             }
           />
           <Stat
             label="Limits"
             value={
               info &&
-              `${formatBytes(info.limits.maxFileBytes)} per file · ${formatBytes(info.limits.maxDeploymentBytes)} per site · ${info.limits.maxFiles.toLocaleString()} files`
+              `${formatBytes(info.limits.maxFileBytes)} per file · ${formatBytes(info.limits.maxSiteBytes)} per site · ${info.limits.maxFiles.toLocaleString()} files`
             }
           />
         </Card>

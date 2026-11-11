@@ -18,5 +18,5 @@ export const fileHref = (siteUrl: string, access: AccessType, path: string) => {
   return access === "public" ? url : previewSessionHref(url)
 }
 
-export const downloadHref = (deploymentId: string, path: string) =>
-  `/api/deployments/${encodeURIComponent(deploymentId)}/files${encodePath(path)}`
+export const downloadHref = (slug: string, path: string) =>
+  `/api/sites/${slug}/files${encodePath(path)}`

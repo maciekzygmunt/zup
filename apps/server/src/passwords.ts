@@ -12,9 +12,9 @@ export const hashPassword = (password: string) =>
 export const verifyPassword = (password: string, hash: string) =>
   Bun.password.verify(password, hash).catch(() => false)
 
-// The site that a cookie or link opens. A deployment and its aliases are separate sites.
-export const siteScope = (target: { alias: string } | { deploymentId: string }) =>
-  "alias" in target ? `alias:${target.alias}` : `deployment:${target.deploymentId}`
+// The site that a cookie or link opens. Uses the internal id, so share tokens survive a slug change.
+// Unlock cookies do not: their path is the old slug, so visitors enter the password again.
+export const siteScope = (siteId: string) => `site:${siteId}`
 
 // Changes with every new password, so old cookies and links stop working.
 const fingerprint = (passwordHash: string) =>

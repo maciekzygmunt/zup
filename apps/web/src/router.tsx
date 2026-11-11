@@ -1,7 +1,6 @@
 import { createBrowserRouter } from "react-router"
 import { AppShell } from "./components/AppShell.tsx"
 import { RequireAuth, SetupGate } from "./components/guards.tsx"
-import { AliasesPage } from "./pages/AliasesPage.tsx"
 import { ConsentPage } from "./pages/ConsentPage.tsx"
 import { DevicePage } from "./pages/DevicePage.tsx"
 import { LoginPage } from "./pages/LoginPage.tsx"
@@ -26,8 +25,7 @@ export const router = createBrowserRouter([
             element: <AppShell />,
             children: [
               { index: true, element: <SitesPage /> },
-              { path: "/sites/:id", element: <SiteDetailPage /> },
-              { path: "/aliases", element: <AliasesPage /> },
+              { path: "/sites/:slug", element: <SiteDetailPage /> },
               { path: "/settings", element: <SettingsPage /> },
               { path: "*", element: <NotFoundPage /> },
             ],

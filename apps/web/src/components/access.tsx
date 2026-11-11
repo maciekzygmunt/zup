@@ -2,9 +2,9 @@ import { Tooltip } from "@base-ui/react/tooltip"
 import {
   type AccessInput,
   type AccessType,
-  type AliasSummary,
   accessTypes,
   passwordSchema,
+  type SiteSummary,
 } from "@zup/shared"
 import { Bot, Globe, KeyRound, Lock } from "lucide-react"
 import { type ReactElement, useId } from "react"
@@ -37,23 +37,24 @@ export function AccessBadge({ access }: { access: AccessType }) {
   )
 }
 
-// Access badge for an alias, with a robot icon when search engines can crawl it.
-export function AliasAccessBadge({ alias }: { alias: Pick<AliasSummary, "access" | "indexable"> }) {
-  const crawlable = isCrawlable(alias)
+type CrawlInfo = Pick<SiteSummary, "access" | "indexable">
+
+// Access badge of a site, with a robot icon when search engines can crawl it.
+export function SiteAccessBadge({ site }: { site: CrawlInfo }) {
+  const crawlable = isCrawlable(site)
   return (
     <CrawlTooltip crawlable={crawlable}>
-      <span className="inline-flex items-center gap-1.5">
-        <AccessBadge access={alias.access} />
+      <span className="relative z-10 inline-flex items-center gap-1.5">
+        <AccessBadge access={site.access} />
         {crawlable && <CrawlIcon />}
       </span>
     </CrawlTooltip>
   )
 }
 
-export const isCrawlable = (alias: Pick<AliasSummary, "access" | "indexable">) =>
-  alias.access === "public" && alias.indexable
+export const isCrawlable = (site: CrawlInfo) => site.access === "public" && site.indexable
 
-export const CrawlIcon = ({ className }: { className?: string }) => (
+const CrawlIcon = ({ className }: { className?: string }) => (
   <Bot
     className={cx("size-3.5 shrink-0 text-muted", className)}
     aria-label="Crawlable"
@@ -61,14 +62,8 @@ export const CrawlIcon = ({ className }: { className?: string }) => (
   />
 )
 
-// Shows "Crawlable" on hover over a chip of an alias that search engines can crawl.
-export function CrawlTooltip({
-  crawlable,
-  children,
-}: {
-  crawlable: boolean
-  children: ReactElement
-}) {
+// Shows "Crawlable" on hover over the badge of a site that search engines can crawl.
+function CrawlTooltip({ crawlable, children }: { crawlable: boolean; children: ReactElement }) {
   if (!crawlable) return children
   return (
     <Tooltip.Root>
@@ -82,11 +77,6 @@ export function CrawlTooltip({
       </Tooltip.Portal>
     </Tooltip.Root>
   )
-}
-
-export function AccessIcon({ access, className }: { access: AccessType; className?: string }) {
-  const { label, icon: Icon } = accessInfo[access]
-  return <Icon className={cx("size-3", className)} aria-label={label} role="img" />
 }
 
 // Editable access state: `password` is the optional custom password.

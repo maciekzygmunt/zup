@@ -1,4 +1,4 @@
-// Manifest paths are absolute POSIX paths inside a deployment, e.g. "/assets/app.js".
+// Manifest paths are absolute POSIX paths inside a site, e.g. "/assets/app.js".
 export function isValidManifestPath(value: string): boolean {
   if (!value.startsWith("/") || value.length > 2048) return false
   if (value.includes("\0") || value.includes("\\") || value.includes("//")) return false

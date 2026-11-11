@@ -8,20 +8,19 @@ import type { ReadableStream } from "node:stream/web"
 import { formatBytes } from "@zup/shared"
 import { authHeaders, client, errorFrom, session, unwrap } from "../api.ts"
 import { mapLimit } from "../pool.ts"
-import { deploymentIdOf, resolveTarget } from "../target.ts"
+import { siteSlug } from "../target.ts"
 import { CliError, dim, green, info, progress } from "../ui.ts"
 
 type PullFlags = { server?: string; force?: boolean; "dry-run"?: boolean }
 
-// Downloads every file of a deployment. Each file is written to a temporary name and
+// Downloads every file of a site. Each file is written to a temporary name and
 // renamed into place only after its SHA-256 matches, so no file is ever half-written.
 export async function pull(input: string, dirInput: string | undefined, flags: PullFlags) {
   const current = await session(flags.server)
   const api = client(current)
-  const target = await resolveTarget(current, api, input)
-  const id = await deploymentIdOf(api, target)
-  const detail = await unwrap(api.deployments[":id"].$get({ param: { id } }))
-  const dir = resolve(dirInput ?? (target.kind === "alias" ? target.name : id))
+  const slug = siteSlug(current, input)
+  const detail = await unwrap(api.sites[":slug"].$get({ param: { slug } }))
+  const dir = resolve(dirInput ?? slug)
   const existing = await readdir(dir).catch(() => [])
 
   if (flags["dry-run"]) {
@@ -58,7 +57,7 @@ export async function pull(input: string, dirInput: string | undefined, flags: P
       }
 
       const encoded = file.path.split("/").map(encodeURIComponent).join("/")
-      const response = await fetch(`${current.server}/api/deployments/${id}/files${encoded}`, {
+      const response = await fetch(`${current.server}/api/sites/${slug}/files${encoded}`, {
         headers: authHeaders(current),
       })
       if (!response.ok || !response.body) throw await errorFrom(response)

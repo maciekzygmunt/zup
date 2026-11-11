@@ -1,3 +1,4 @@
+import type { SiteSummary } from "@zup/shared"
 import { UploadCloud } from "lucide-react"
 import {
   createContext,
@@ -18,26 +19,33 @@ import {
 } from "../../lib/files.ts"
 import { UploadDialog } from "./UploadDialog.tsx"
 
-type UploadContext = { pickFiles: () => void; pickFolder: () => void }
+// With a site, the picked files replace that site's files.
+type UploadContext = {
+  pickFiles: (site?: SiteSummary) => void
+  pickFolder: (site?: SiteSummary) => void
+}
 
 const Context = createContext<UploadContext>({ pickFiles() {}, pickFolder() {} })
 
 export const useUpload = () => use(Context)
 
 // Owns the file inputs, the window-wide drop target and the upload dialog.
+// Drops always make a new site.
 export function UploadProvider({ children }: { children: ReactNode }) {
-  const [picked, setPicked] = useState<Picked | null>(null)
+  const [upload, setUpload] = useState<{ picked: Picked; site?: SiteSummary } | null>(null)
+  // The site to replace, set when an input opens and read when it returns files.
+  const replacing = useRef<SiteSummary>(undefined)
   const [open, setOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
   const filesInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
 
-  const start = (next: Picked) => {
-    if (!next.files.length) {
+  const start = (picked: Picked, site?: SiteSummary) => {
+    if (!picked.files.length) {
       toast.error("No files to upload. Hidden folders like .git and node_modules are skipped.")
       return
     }
-    setPicked(next)
+    setUpload({ picked, site })
     setOpen(true)
   }
 
@@ -91,8 +99,14 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   return (
     <Context
       value={{
-        pickFiles: () => filesInput.current?.click(),
-        pickFolder: () => folderInput.current?.click(),
+        pickFiles: (site) => {
+          replacing.current = site
+          filesInput.current?.click()
+        },
+        pickFolder: (site) => {
+          replacing.current = site
+          folderInput.current?.click()
+        },
       }}
     >
       {children}
@@ -102,7 +116,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         multiple
         hidden
         onChange={(e) => {
-          if (e.target.files) start(filesFromInput(e.target.files))
+          if (e.target.files) start(filesFromInput(e.target.files), replacing.current)
           e.target.value = ""
         }}
       />
@@ -114,7 +128,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         type="file"
         hidden
         onChange={(e) => {
-          if (e.target.files) start(filesFromFolderInput(e.target.files))
+          if (e.target.files) start(filesFromFolderInput(e.target.files), replacing.current)
           e.target.value = ""
         }}
       />
@@ -129,7 +143,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
-      {picked && <UploadDialog picked={picked} open={open} onOpenChange={setOpen} />}
+      {upload && <UploadDialog {...upload} open={open} onOpenChange={setOpen} />}
     </Context>
   )
 }

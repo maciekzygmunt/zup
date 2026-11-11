@@ -1,4 +1,4 @@
-import { type AccessInput, generateKey } from "@zup/shared"
+import type { AccessInput } from "@zup/shared"
 import { CliError } from "./ui.ts"
 
 export type AccessFlags = {
@@ -9,7 +9,7 @@ export type AccessFlags = {
 }
 
 // Turns --public / --private / --protect / --password into an access input.
-// --protect generates the key here, so a site and its alias can share it.
+// --protect leaves the key to the server, unless ZUP_PASSWORD sets it.
 export function accessFromFlags(flags: AccessFlags): AccessInput | undefined {
   const chosen = [flags.public, flags.private, flags.protect || flags.password !== undefined]
   if (chosen.filter(Boolean).length > 1) {
@@ -22,17 +22,14 @@ export function accessFromFlags(flags: AccessFlags): AccessInput | undefined {
     return { type: "password", password: flags.password }
   }
   if (flags.protect) {
-    return {
-      type: "password",
-      password: process.env.ZUP_PASSWORD || generateKey(),
-    }
+    return { type: "password", password: process.env.ZUP_PASSWORD || undefined }
   }
   return undefined
 }
 
 export type IndexFlags = { index?: boolean; "no-index"?: boolean }
 
-// Turns --index / --no-index into whether search engines may crawl an alias. Undefined keeps it.
+// Turns --index / --no-index into whether search engines may crawl a site. Undefined keeps it.
 export function indexableFromFlags(flags: IndexFlags) {
   if (flags.index && flags["no-index"]) throw new CliError("Use only one of --index, --no-index")
   return flags.index ? true : flags["no-index"] ? false : undefined

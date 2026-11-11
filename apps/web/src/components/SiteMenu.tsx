@@ -1,11 +1,12 @@
-import type { DeploymentSummary } from "@zup/shared"
+import type { SiteSummary } from "@zup/shared"
 import {
   ExternalLink,
+  FilePlus2,
   FolderTree,
+  FolderUp,
   Link as LinkIcon,
   MoreHorizontal,
   Pencil,
-  Plus,
   Share2,
   ShieldCheck,
   Trash2,
@@ -17,27 +18,31 @@ import { browseHref, openHref } from "../lib/links.ts"
 import { copyText } from "./copy.tsx"
 import { Menu, MenuItem, MenuLink, MenuSeparator } from "./Menu.tsx"
 import {
-  AddAliasDialog,
   ChangeAccessDialog,
-  DeleteDeploymentDialog,
+  DeleteSiteDialog,
   EditDetailsDialog,
+  siteName,
 } from "./site-dialogs.tsx"
 import { buttonClass } from "./ui.tsx"
+import { useUpload } from "./upload/UploadProvider.tsx"
 
-// Creates a fresh `#token=` link for a password-protected deployment or alias and copies it.
-export async function copyShareLink(target: { deploymentId: string } | { alias: string }) {
+// Creates a fresh `#token=` link for a password-protected site and copies it.
+export async function copyShareLink(slug: string) {
   try {
-    const { shareUrl } = await parseResponse(api["share-links"].$post({ json: target }))
+    const { shareUrl } = await parseResponse(
+      api.sites[":slug"]["share-link"].$post({ param: { slug } }),
+    )
     await copyText(shareUrl, "Share link copied")
   } catch (error) {
     toast.error(errorMessage(error))
   }
 }
 
-type DialogName = "access" | "details" | "alias" | "delete"
+type DialogName = "access" | "details" | "delete"
 
-// Row actions for one deployment, with the dialogs they open.
-export function SiteMenu({ deployment }: { deployment: DeploymentSummary }) {
+// Row actions for one site, with the dialogs they open.
+export function SiteMenu({ site }: { site: SiteSummary }) {
+  const { pickFiles, pickFolder } = useUpload()
   const [dialog, setDialog] = useState<DialogName | null>(null)
   const control = (name: DialogName) => ({
     open: dialog === name,
@@ -50,24 +55,24 @@ export function SiteMenu({ deployment }: { deployment: DeploymentSummary }) {
           <button
             type="button"
             className={buttonClass("ghost", "icon")}
-            aria-label={`Actions for ${deployment.title || deployment.id}`}
+            aria-label={`Actions for ${siteName(site)}`}
           >
             <MoreHorizontal className="size-4" />
           </button>
         }
       >
-        <MenuLink icon={ExternalLink} href={openHref(deployment.url, deployment.access)}>
+        <MenuLink icon={ExternalLink} href={openHref(site.url, site.access)}>
           Open
         </MenuLink>
-        <MenuItem icon={LinkIcon} onClick={() => copyText(deployment.url)}>
+        <MenuItem icon={LinkIcon} onClick={() => copyText(site.url)}>
           Copy link
         </MenuItem>
-        {deployment.access === "password" && (
-          <MenuItem icon={Share2} onClick={() => copyShareLink({ deploymentId: deployment.id })}>
+        {site.access === "password" && (
+          <MenuItem icon={Share2} onClick={() => copyShareLink(site.slug)}>
             Copy share link
           </MenuItem>
         )}
-        <MenuLink icon={FolderTree} href={browseHref(deployment.url)}>
+        <MenuLink icon={FolderTree} href={browseHref(site.url)}>
           Browse files
         </MenuLink>
         <MenuSeparator />
@@ -77,26 +82,20 @@ export function SiteMenu({ deployment }: { deployment: DeploymentSummary }) {
         <MenuItem icon={Pencil} onClick={() => setDialog("details")}>
           Edit details…
         </MenuItem>
-        <MenuItem icon={Plus} onClick={() => setDialog("alias")}>
-          Add alias…
+        <MenuItem icon={FilePlus2} onClick={() => pickFiles(site)}>
+          Replace with files…
+        </MenuItem>
+        <MenuItem icon={FolderUp} onClick={() => pickFolder(site)}>
+          Replace with folder…
         </MenuItem>
         <MenuSeparator />
         <MenuItem icon={Trash2} danger onClick={() => setDialog("delete")}>
           Delete…
         </MenuItem>
       </Menu>
-      <ChangeAccessDialog
-        target={{
-          kind: "deployment",
-          id: deployment.id,
-          access: deployment.access,
-          aliases: deployment.aliases,
-        }}
-        {...control("access")}
-      />
-      <EditDetailsDialog deployment={deployment} {...control("details")} />
-      <AddAliasDialog deployment={deployment} {...control("alias")} />
-      <DeleteDeploymentDialog deployment={deployment} {...control("delete")} />
+      <ChangeAccessDialog site={site} {...control("access")} />
+      <EditDetailsDialog site={site} {...control("details")} />
+      <DeleteSiteDialog site={site} {...control("delete")} />
     </>
   )
 }
